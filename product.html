@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>APEX BIM Studio — AI Revit Family Generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="apex-rv.css" />
+<link rel="stylesheet" href="apex-pages.css" />
+</head>
+<body>
+
+<div class="announce">
+  <a href="demo.html"><span class="tag">New</span> The 2026 BIM-to-Field Benchmark Report is here <span class="arr">→</span></a>
+</div>
+<header class="site">
+  <div class="wrap nav">
+    <a class="brand" href="index.html"><span class="mark"></span>APEX <span class="bim">BIM</span> STUDIO</a>
+    <nav class="nav-links">
+      <a class="nl" href="product.html">Product</a>
+      <a class="nl" href="survey.html">Survey &amp; Layout</a>
+      <a class="nl" href="integrations.html">Integrations</a>
+      <a class="nl" href="pricing.html">Pricing</a>
+      <a class="nl" href="about.html">About</a>
+    </nav>
+    <div class="nav-cta">
+      <a class="login" href="#">Log in</a>
+      <a class="btn btn-primary" href="demo.html">Book a demo</a>
+    </div>
+  </div>
+</header>
+
+<!-- 1 ── Page hero ── -->
+<section class="page-hero">
+  <div class="wrap">
+    <div class="reveal">
+      <div class="crumb"><a href="index.html">Home</a> <span class="sep">/</span> Product</div>
+      <span class="eyebrow">Product · AI Family Generator</span>
+      <h1>Generate construction-ready Revit families in seconds.</h1>
+      <p class="lead">Turn shop drawings, submittals and manufacturer data into coordination-correct, data-rich Revit families — automatically.</p>
+      <div class="hero-cta">
+        <a class="btn btn-primary btn-lg" href="demo.html">Book a demo <span class="arr">→</span></a>
+        <a class="btn btn-ghost btn-lg" href="pricing.html">See pricing</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 2 ── The problem ── -->
+<section class="pad-sm lede-band">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">The problem</span>
+      <h2>Modeling content is where BIM schedules quietly bleed out.</h2>
+      <p class="lead">Every family built by hand is hours your team isn't coordinating, and a chance for the model to drift from what gets installed.</p>
+    </div>
+    <div class="bgrid reveal">
+      <div class="bcard">
+        <div class="bi">◷</div>
+        <h3>Hours lost to manual modeling</h3>
+        <p>Detailers spend whole days redrawing geometry from PDFs that a manufacturer already published. Multiply that across every submittal and the calendar disappears.</p>
+      </div>
+      <div class="bcard">
+        <div class="bi">▤</div>
+        <h3>Inconsistent data &amp; standards</h3>
+        <p>Parameters, naming and LOD shift family to family and modeler to modeler. Schedules don't add up and downstream automation has nothing reliable to read.</p>
+      </div>
+      <div class="bcard">
+        <div class="bi">⚠</div>
+        <h3>Clashes found in the field, not the model</h3>
+        <p>When clearance zones and connectors are missing, coordination passes clean and the conflict shows up on site — as an RFI, a delay and a change order.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 3 ── How it works ── -->
+<section class="pad">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">Workflow</span>
+      <h2>From drawing to family in five steps.</h2>
+      <p class="lead">Drop in source content and APEX returns a coordination-correct family — every step is auditable, none of it is hand-modeled.</p>
+    </div>
+    <div class="steps reveal">
+      <div class="step">
+        <span class="sn">01</span>
+        <div>
+          <h3>Upload shop drawing or submittal</h3>
+          <p>Feed APEX a manufacturer PDF, submittal package or cut sheet. No template prep, no manual tracing — just the source you already have on hand.</p>
+        </div>
+      </div>
+      <div class="step">
+        <span class="sn">02</span>
+        <div>
+          <h3>AI reads geometry, tags &amp; dimensions</h3>
+          <p>Computer vision extracts overall geometry, dimension strings, connector locations and the typed data buried in tables and title blocks.</p>
+        </div>
+      </div>
+      <div class="step">
+        <span class="sn">03</span>
+        <div>
+          <h3>Builds a parametric LOD 400 family</h3>
+          <p>APEX authors a native parametric family with driven dimensions and flex points — fabrication-level detail, not a placeholder box.</p>
+        </div>
+      </div>
+      <div class="step">
+        <span class="sn">04</span>
+        <div>
+          <h3>Embeds data, clearance zones &amp; nested survey points</h3>
+          <p>Electrical, mechanical and procurement parameters are written in, maintenance clearances are modeled, and survey points are nested for layout.</p>
+        </div>
+      </div>
+      <div class="step">
+        <span class="sn">05</span>
+        <div>
+          <h3>Validate &amp; export field-ready content</h3>
+          <p>Automated checks confirm geometry, data completeness and clearance before you ship a clash-ready, schedule-correct family into the project.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 4 & 5 ── Feature rows ── -->
+<section class="pad-sm">
+  <div class="wrap">
+    <div class="frow reveal">
+      <div class="frow-copy">
+        <div class="ficon">✦</div>
+        <h3>Parametric, coordination-correct geometry</h3>
+        <p>Families come out as true parametric content — driven dimensions, real connectors and accurate solids that flex to match the spec, not approximations a coordinator has to fight.</p>
+        <div class="chips">
+          <span class="chip">PDF &amp; submittals</span>
+          <span class="chip">Parametric</span>
+          <span class="chip">LOD 400</span>
+        </div>
+      </div>
+      <div class="frow-media">
+        <div class="media-frame dark">
+          <div class="mbar"><div class="winicon" style="width:13px;height:13px;border-width:1.5px;"></div><span style="font-family:var(--font-mono);font-size:10.5px;color:var(--on-dark-mid);margin-left:8px;">Autodesk Revit — APS-MV-001.rfa</span><div class="traffic"><i></i><i></i><i></i></div></div>
+          <div class="mbody" style="padding:0;">
+            <div class="revit-ui">
+              <div class="rv-ribbon">
+                <div class="rv-tabs"><span>File</span><span>Architecture</span><span>Systems</span><span>Insert</span><span class="on">APEX</span><span>Modify</span></div>
+                <div class="rv-tools"><span class="rv-tool hot">✦</span><span class="rv-tool">◳</span><span class="rv-tool">✛</span><span class="rv-tool">▦</span><span class="rv-tool">≣</span><span class="rv-tool">⊕</span><span class="rv-tool">◫</span></div>
+              </div>
+              <div class="rv-main">
+                <div class="rv-side">
+                  <div class="rv-pal">Properties</div>
+                  <div class="rv-prow"><span class="k">Family</span><span class="v hot">APS-MV-001</span></div>
+                  <div class="rv-prow"><span class="k">Category</span><span class="v">Elec Equip</span></div>
+                  <div class="rv-prow"><span class="k">Voltage</span><span class="v">15 kV</span></div>
+                  <div class="rv-prow"><span class="k">Clearance</span><span class="v">1830 mm</span></div>
+                  <div class="rv-pal">Project Browser</div>
+                  <div class="rv-tree"><span>Views (all)</span><span class="ind">3D Views</span><span class="ind on">{3D} — APS-MV-001</span><span class="ind">L2 Power Plan</span><span>Families</span></div>
+                </div>
+                <div class="rv-view">
+                  <span class="rv-badge pts">+ 4 survey points</span>
+                  <div class="rv-cube"></div>
+                  <div class="iso-clear"></div>
+                  <div class="cube"><div class="side top"><span class="seam"></span></div><div class="side left"></div><div class="side right"></div></div>
+                  <span class="iso-pt" style="left:30%;top:44%"></span><span class="iso-pt" style="left:70%;top:44%"></span>
+                  <span class="iso-pt" style="left:30%;top:70%"></span><span class="iso-pt" style="left:70%;top:70%"></span>
+                  <span class="rv-vlabel">3D View · {3D}</span>
+                  <span class="rv-badge gen"><span class="dot"></span>Generated in 47s</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="frow flip reveal">
+      <div class="frow-copy">
+        <div class="ficon">✓</div>
+        <h3>Validated before it ships</h3>
+        <p>Every family runs an automated check suite — geometry and connectors, embedded data completeness, and modeled maintenance clearance — so what lands in the model is clash-ready and schedule-correct from the first placement.</p>
+        <div class="chips">
+          <span class="chip">Clearance zones</span>
+          <span class="chip">Data completeness</span>
+          <span class="chip">Clash-ready</span>
+        </div>
+      </div>
+      <div class="frow-media">
+        <div class="media-frame dark">
+          <div class="mbar"><div class="winicon" style="width:13px;height:13px;border-width:1.5px;"></div><span style="font-family:var(--font-mono);font-size:10.5px;color:var(--on-dark-mid);margin-left:8px;">Autodesk Revit — APEX Validation</span><div class="traffic"><i></i><i></i><i></i></div></div>
+          <div class="mbody" style="padding:0;">
+            <div class="revit-ui">
+              <div class="rv-ribbon">
+                <div class="rv-tabs"><span>File</span><span>Systems</span><span class="on">APEX</span><span>Modify</span></div>
+                <div class="rv-tools"><span class="rv-tool hot">✓</span><span class="rv-tool">▤</span><span class="rv-tool">≣</span><span class="rv-tool">⊕</span></div>
+              </div>
+              <div class="rv-main">
+                <div class="rv-side">
+                  <div class="rv-pal">Properties</div>
+                  <div class="rv-prow"><span class="k">Family</span><span class="v hot">APS-MV-001</span></div>
+                  <div class="rv-prow"><span class="k">Checks</span><span class="v">8 total</span></div>
+                  <div class="rv-prow"><span class="k">Result</span><span class="v">7 pass</span></div>
+                  <div class="rv-pal">Project Browser</div>
+                  <div class="rv-tree"><span class="on">APEX Validation</span><span class="ind">Clearance Check</span><span>Families</span></div>
+                </div>
+                <div class="rv-view">
+                  <div class="val-list dk">
+                    <div class="val-row"><span class="vk">✓</span>Geometry &amp; connectors<span class="vstat">PASS</span></div>
+                    <div class="val-row"><span class="vk">✓</span>Maintenance clearance zone<span class="vstat">PASS</span></div>
+                    <div class="val-row"><span class="vk">✓</span>Voltage &amp; system data<span class="vstat">PASS</span></div>
+                    <div class="val-row"><span class="vk">✓</span>Survey points nested<span class="vstat">4 / 4</span></div>
+                    <div class="val-row warn"><span class="vk">!</span>Procurement data<span class="vstat">REVIEW</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 6 ── ROI (dark) ── -->
+<section class="trust pad-sm">
+  <div class="wrap">
+    <div class="section-head center reveal">
+      <span class="eyebrow on-dark">Proven ROI</span>
+      <h2>Less hand-modeling. More coordination that holds.</h2>
+    </div>
+    <div class="kpi-strip reveal">
+      <div class="k"><div class="kv">90<span class="u">%</span></div><div class="kl">Fewer modeling hours</div></div>
+      <div class="k"><div class="kv">47<span class="u">s</span></div><div class="kl">Average generation</div></div>
+      <div class="k"><div class="kv">LOD 400</div><div class="kl">Fabrication-level output</div></div>
+      <div class="k"><div class="kv">0</div><div class="kl">First-pass clashes</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 7 ── Use cases ── -->
+<section class="pad">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">Use cases</span>
+      <h2>Built for the trades that live and die by content.</h2>
+      <p class="lead">From switchgear to skids, APEX generates the disciplined, data-rich families your coordination and fabrication workflows depend on.</p>
+    </div>
+    <div class="bgrid cols-4 reveal">
+      <div class="bcard">
+        <div class="bi">⚡</div>
+        <h3>Electrical</h3>
+        <p>Switchgear, transformers and panels with voltage data, code clearances and connectors modeled to spec.</p>
+      </div>
+      <div class="bcard">
+        <div class="bi">❖</div>
+        <h3>Mechanical</h3>
+        <p>AHUs, pumps and equipment skids with accurate connectors, service access and full system parameters.</p>
+      </div>
+      <div class="bcard">
+        <div class="bi">▦</div>
+        <h3>Data Centers</h3>
+        <p>Repeatable rack, PDU and CRAC content built once and flexed across every hall and white-space module.</p>
+      </div>
+      <div class="bcard">
+        <div class="bi">⬢</div>
+        <h3>Prefabrication</h3>
+        <p>Fabrication-ready families with nested survey points that drive layout, kitting and the shop floor directly.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 8 ── Final CTA (dark) ── -->
+<section class="cta pad">
+  <div class="glow"></div>
+  <div class="wrap">
+    <div class="inner reveal">
+      <h2>See it generate your family.</h2>
+      <p>Bring a real submittal to a live demo and watch APEX turn it into a coordination-correct, field-ready Revit family — in seconds.</p>
+      <div class="row">
+        <a class="btn btn-primary btn-lg" href="demo.html">Book a demo <span class="arr">→</span></a>
+        <a class="btn btn-ghost on-dark btn-lg" href="#">Join the waitlist</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="site">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <a class="brand" href="index.html"><span class="mark"></span>APEX <span class="bim">BIM</span> STUDIO</a>
+        <p>The intelligent layer between BIM, the field, and everything in between. Built by construction professionals.</p>
+      </div>
+      <div class="foot-col">
+        <h4>Product</h4>
+        <a href="product.html">AI Family Generator</a>
+        <a href="survey.html">Survey &amp; Layout</a>
+        <a href="integrations.html">Integrations</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="demo.html">Book a demo</a>
+      </div>
+      <div class="foot-col">
+        <h4>Company</h4>
+        <a href="about.html">About</a>
+        <a href="#">Blog</a>
+        <a href="#">Careers</a>
+        <a href="demo.html">Contact</a>
+      </div>
+      <div class="foot-col">
+        <h4>Resources</h4>
+        <a href="#">Documentation</a>
+        <a href="demo.html">Waitlist</a>
+        <a href="#">Log in</a>
+        <a href="#">Status</a>
+      </div>
+    </div>
+    <div class="foot-meta">
+      <span>APEX BIM Studio · Millville, Utah · Building the future of construction data</span>
+      <span>© 2026 APEX BIM Studio</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, { threshold: 0.1 });
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+</script>
+</body>
+</html>

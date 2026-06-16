@@ -1,0 +1,4 @@
+# Static multi-page site — no build step.
+# Netlify serves every .html straight from the repo root (e.g. /pricing.html).
+[build]
+  publish = "."

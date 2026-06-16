@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>APEX BIM Studio — From Shop Drawing to Field-Ready in Minutes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="apex-rv.css" />
+<script src="image-slot.js"></script>
+</head>
+<body>
+
+<!-- ═══ ANNOUNCE + HEADER ═══ -->
+<div class="announce">
+  <a href="demo.html"><span class="tag">New</span> The 2026 BIM-to-Field Benchmark Report is here <span class="arr">→</span></a>
+</div>
+<header class="site">
+  <div class="wrap nav">
+    <a class="brand" href="#top"><span class="mark"></span>APEX <span class="bim">BIM</span> STUDIO</a>
+    <nav class="nav-links">
+      <a class="nl" href="product.html">Product</a>
+      <a class="nl" href="survey.html">Survey &amp; Layout</a>
+      <a class="nl" href="integrations.html">Integrations</a>
+      <a class="nl" href="pricing.html">Pricing</a>
+      <a class="nl" href="about.html">About</a>
+    </nav>
+    <div class="nav-cta">
+      <a class="login" href="#">Log in</a>
+      <a class="btn btn-primary" href="demo.html">Book a demo</a>
+    </div>
+  </div>
+</header>
+
+<!-- ═══ HERO ═══ -->
+<section class="hero" id="top">
+  <div class="wrap">
+    <span class="eyebrow">AI Revit Content Platform</span>
+    <h1>From shop drawing to <em>field&#8209;ready</em> in minutes.</h1>
+    <p class="lead">APEX turns shop drawings, submittals, and manufacturer data into construction-ready Revit content — with clearance zones, embedded data, and survey points that export straight to the field.</p>
+    <div class="hero-cta">
+      <a class="btn btn-primary btn-lg" href="demo.html">Book a demo <span class="arr">→</span></a>
+      <a class="btn btn-ghost btn-lg" href="#platform">See how it works</a>
+    </div>
+    <div class="hero-note">Now in private beta · Built for Revit, ACC &amp; Trimble workflows</div>
+
+    <div class="hero-shot reveal">
+      <div class="sim" id="sim" data-state="idle">
+
+        <!-- control bar -->
+        <div class="sim-controls">
+          <div class="sim-pick">
+            <span class="sim-step">Try it live — Apex Data Campus Alpha · submittal ABS-001</span>
+            <div class="ts-tabs" id="simDisc" style="margin-top:0;margin-bottom:10px;">
+              <button class="ts-tab active" data-disc="elec">⚡ Electrical</button>
+              <button class="ts-tab" data-disc="mech">⚙ Mechanical</button>
+            </div>
+            <div class="sim-chips" id="simChips">
+              <button class="sim-chip active" data-sample="mv" data-disc="elec">⚡ MV Power Skid</button>
+              <button class="sim-chip" data-sample="lv" data-disc="elec">▦ LV Switchgear</button>
+              <button class="sim-chip" data-sample="xfr" data-disc="elec">◉ Transformer</button>
+              <button class="sim-chip" data-sample="ahu" data-disc="mech" hidden>⚙ Air Handling Unit</button>
+              <button class="sim-chip" data-sample="chp" data-disc="mech" hidden>◍ CHW Pump Skid</button>
+              <button class="sim-chip" data-sample="crac" data-disc="mech" hidden>▤ CRAC Unit</button>
+            </div>
+          </div>
+          <div class="sim-actions">
+            <span class="sim-status" id="simStatus">Ready to generate</span>
+            <button class="btn btn-primary" id="simRun">Generate family <span class="arr">→</span></button>
+            <button class="btn btn-ghost sim-reset" id="simReset" hidden>Reset</button>
+          </div>
+        </div>
+
+        <div class="app-window dark">
+          <div class="app-bar">
+            <div class="winicon"></div>
+            <div class="app-title">APEX for Revit — <b id="simTitle">Apex Data Campus Alpha</b></div>
+            <div class="traffic"><i></i><i></i><i></i></div>
+          </div>
+          <div class="revit-tabs">
+            <span class="rtab active" id="simRtab">ABS.300 — Electrical Connections</span>
+            <span class="rtab">ABS.100 — Cover Sheet</span>
+          </div>
+          <div class="app-body">
+            <!-- INPUT -->
+            <div class="panel">
+              <div class="panel-head"><span class="pt">Input · Shop drawing</span><span class="pb" id="simFmt">PDF</span></div>
+              <div class="dwg">
+                <span class="sheet-tag" id="simSheet">ABS.300 · ELECTRICAL CONNECTIONS</span>
+                <div class="lineart" id="simLineart">
+                  <div class="box b1"></div><div class="box b2"></div><div class="box b3"></div>
+                </div>
+                <div class="scan"></div>
+              </div>
+            </div>
+
+            <!-- OUTPUT -->
+            <div class="panel">
+              <div class="panel-head"><span class="pt">Revit · Plan view</span><span class="pb" id="simOutBadge">Idle</span></div>
+              <div class="fam">
+                <!-- empty state -->
+                <div class="out-empty" id="simEmpty">
+                  <div class="oe-icon">◳</div>
+                  <span>Awaiting generation</span>
+                  <small>Hit Generate to place the family</small>
+                </div>
+                <!-- processing state -->
+                <div class="out-proc" id="simProc">
+                  <div class="spinner"></div>
+                  <span id="simProcText">Reading sheet…</span>
+                </div>
+                <!-- generated: Revit plan viewport -->
+                <div class="fam-result" id="simResult">
+                  <span class="badge-pts" id="simPtsBadge">+ 4 survey points</span>
+                  <div class="revit-plan">
+                    <div class="grid"></div>
+                    <div class="rp-room"></div>
+                    <div class="rp-vline" style="left:50%"></div>
+                    <div class="rp-vline" style="left:74%"></div>
+                    <div class="rp-hline" style="left:50%;right:9%;top:51%"></div>
+                    <div class="rp-clear" style="left:15%;top:28%;width:31%;height:40%"></div>
+                    <div class="rp-zone" style="left:18%;top:33%;width:25%;height:30%"></div>
+                    <div class="rp-equip" style="left:25%;top:41%;width:11%;height:14%"></div>
+                    <div class="rp-tag" id="simRpTag" style="left:29%;top:28%">APS-MV-001</div>
+                    <span class="rp-pt" style="left:25%;top:41%"></span><span class="rp-pt" style="left:36%;top:41%"></span>
+                    <span class="rp-pt" style="left:25%;top:55%"></span><span class="rp-pt" style="left:36%;top:55%"></span>
+                    <span class="rp-pt faint" style="left:62%;top:38%"></span>
+                    <span class="rp-pt faint" style="left:84%;top:64%"></span>
+                    <span class="rp-pt faint" style="left:64%;top:74%"></span>
+                  </div>
+                  <span class="badge-gen"><span class="dot"></span>Generated in <span id="simTimer">47</span>s</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- PARAMS -->
+            <div class="panel params">
+              <div class="panel-head"><span class="pt">Parameters</span><span class="pb">LOD 400</span></div>
+              <div class="param-scroll" id="simParams">
+                <!-- idle skeleton -->
+                <div class="pskel" id="simSkel">
+                  <div class="ph">Identity</div>
+                  <span class="skline"></span><span class="skline"></span><span class="skline"></span>
+                  <div class="ph">Location &amp; clearance</div>
+                  <span class="skline"></span><span class="skline"></span>
+                  <div class="ph">Integration</div>
+                  <span class="skline"></span><span class="skline"></span>
+                </div>
+                <!-- filled (JS injected) -->
+                <div class="pfill" id="simFill"></div>
+              </div>
+              <div class="progress">
+                <div class="pl"><span>VALIDATION</span><span id="simChecks">0 / 8 checks</span></div>
+                <div class="track"><div class="fill" id="simBar" style="width:0%"></div></div>
+                <button class="exp-btn" id="simExport" disabled>↳ Export field points (CSV)</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- export drawer -->
+        <div class="csv-drawer" id="simDrawer" hidden>
+          <div class="cd-head"><span id="simDrawerName">survey_points.csv</span><span id="simDrawerMeta">exporting…</span></div>
+          <pre class="cd-body" id="simDrawerBody"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ PARTNERS ═══ -->
+<section class="partners pad-sm" id="partners">
+  <div class="wrap">
+    <div class="section-head center reveal" style="margin:0 auto;">
+      <span class="eyebrow">Partners</span>
+      <h2>Built with the contractors who set the standard.</h2>
+      <p class="lead">APEX is developed hand-in-hand with the BIM &amp; VDC departments at leading electrical contractors — so every tool is proven on real jobs before it ships.</p>
+    </div>
+    <div class="partner-grid reveal">
+      <div class="partner">
+        <div class="pwm cve"><span class="m">⚡</span><span class="t"><b>Cache Valley</b><i>ELECTRIC</i></span></div>
+        <div class="pl">Salt Lake, UT</div>
+      </div>
+      <div class="partner">
+        <div class="pwm taylor"><span class="m">T</span><span class="t"><b>Taylor</b><i>ELECTRIC</i></span></div>
+        <div class="pl">Salt Lake, UT</div>
+      </div>
+      <div class="partner">
+        <div class="pwm summit"><span class="m">▲</span><span class="t"><b>Summit</b><i>ELECTRIC</i></span></div>
+        <div class="pl">Logan, UT</div>
+      </div>
+      <div class="partner">
+        <div class="pwm dp"><span class="m">DP</span><span class="t"><b>DP&nbsp;Electric</b><i>PHOENIX</i></span></div>
+        <div class="pl">Tempe, AZ</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ TRUST STATS ═══ -->
+<section class="trust pad-sm">
+  <div class="wrap">
+    <div class="section-head center reveal">
+      <span class="eyebrow on-dark">Why APEX</span>
+      <h2 style="color:#fff;">Built to pay for itself on the first project.</h2>
+      <p class="lead">Stop building families by hand. Generate construction-ready content in seconds — and send it to the field without a rebuild.</p>
+    </div>
+    <div class="stat-row reveal">
+      <div class="stat"><div class="sv">90<span class="u">%</span></div><div class="sl">Fewer modeling hours per project versus building families by hand.</div></div>
+      <div class="stat"><div class="sv">47<span class="u">s</span></div><div class="sl">Average time to generate a coordination-correct, data-rich family.</div></div>
+      <div class="stat"><div class="sv">0</div><div class="sl">Clashes on the first coordination pass — clearance zones built in.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ PLATFORM — FEATURE ROWS ═══ -->
+<section class="pad" id="platform">
+  <div class="wrap">
+    <div class="section-head center reveal" style="margin-bottom: clamp(56px,7vw,88px);">
+      <span class="eyebrow">The platform</span>
+      <h2>Everything between BIM and the field.</h2>
+      <p class="lead">One platform to generate, validate, and deploy construction-ready Revit content.</p>
+    </div>
+
+    <!-- Row 1 -->
+    <div class="frow reveal">
+      <div class="frow-copy">
+        <div class="ficon">✦</div>
+        <h3>AI family generation</h3>
+        <p>Drop in a shop drawing, submittal, or cut sheet. APEX reads the geometry, tags, and dimensions and builds a coordination-correct Revit family — in seconds, not hours.</p>
+        <div class="chips"><span class="chip">PDF &amp; submittals</span><span class="chip">Parametric</span><span class="chip">LOD 400</span></div>
+        <a class="linkmore" href="#">Explore the generator <span class="arr">→</span></a>
+      </div>
+      <div class="frow-media">
+        <div class="media-frame dark">
+          <div class="mbar"><div class="winicon" style="width:13px;height:13px;border-width:1.5px;"></div><span style="font-family:var(--font-mono);font-size:10.5px;color:var(--on-dark-mid);margin-left:8px;">Autodesk Revit — APS-MV-001.rfa</span><div class="traffic"><i></i><i></i><i></i></div></div>
+          <div class="mbody" style="padding:0;">
+            <div class="revit-ui">
+              <div class="rv-ribbon">
+                <div class="rv-tabs"><span>File</span><span>Architecture</span><span>Systems</span><span>Insert</span><span class="on">APEX</span><span>Modify</span></div>
+                <div class="rv-tools"><span class="rv-tool hot">✦</span><span class="rv-tool">◳</span><span class="rv-tool">✛</span><span class="rv-tool">▦</span><span class="rv-tool">≣</span><span class="rv-tool">⊕</span><span class="rv-tool">◫</span></div>
+              </div>
+              <div class="rv-main">
+                <div class="rv-side">
+                  <div class="rv-pal">Properties</div>
+                  <div class="rv-prow"><span class="k">Family</span><span class="v hot">APS-MV-001</span></div>
+                  <div class="rv-prow"><span class="k">Category</span><span class="v">Elec Equip</span></div>
+                  <div class="rv-prow"><span class="k">Voltage</span><span class="v">15 kV</span></div>
+                  <div class="rv-prow"><span class="k">Clearance</span><span class="v">1830 mm</span></div>
+                  <div class="rv-pal">Project Browser</div>
+                  <div class="rv-tree">
+                    <span>Views (all)</span>
+                    <span class="ind">3D Views</span>
+                    <span class="ind on">{3D} — APS-MV-001</span>
+                    <span class="ind">L2 Power Plan</span>
+                    <span>Families</span>
+                  </div>
+                </div>
+                <div class="rv-view">
+                  <span class="rv-badge pts">+ 4 survey points</span>
+                  <div class="rv-cube"></div>
+                  <div class="iso-clear"></div>
+                  <div class="cube"><div class="side top"><span class="seam"></span></div><div class="side left"></div><div class="side right"></div></div>
+                  <span class="iso-pt" style="left:30%;top:44%"></span><span class="iso-pt" style="left:70%;top:44%"></span>
+                  <span class="iso-pt" style="left:30%;top:70%"></span><span class="iso-pt" style="left:70%;top:70%"></span>
+                  <span class="rv-vlabel">3D View · {3D}</span>
+                  <span class="rv-badge gen"><span class="dot"></span>Generated in 47s</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 2 -->
+    <div class="frow flip reveal">
+      <div class="frow-copy">
+        <div class="ficon">✛</div>
+        <h3>Survey &amp; field layout</h3>
+        <p>Survey points are nested inside every family and export to a clean CSV — straight to Trimble and Autodesk field formats. The installed layout matches the model, exactly.</p>
+        <div class="chips"><span class="chip">Trimble Field Points</span><span class="chip">Autodesk Survey Points</span><span class="chip">CSV export</span></div>
+        <a class="linkmore" href="#">See survey &amp; layout <span class="arr">→</span></a>
+      </div>
+      <div class="frow-media">
+        <div class="media-frame dark">
+          <div class="mbar"><div class="winicon" style="width:13px;height:13px;border-width:1.5px;"></div><span style="font-family:var(--font-mono);font-size:10.5px;color:var(--on-dark-mid);margin-left:8px;">Autodesk Revit — L2 Power Plan</span><div class="traffic"><i></i><i></i><i></i></div></div>
+          <div class="mbody" style="padding:0;">
+            <div class="revit-ui">
+              <div class="rv-ribbon">
+                <div class="rv-tabs"><span>File</span><span>Systems</span><span class="on">APEX</span><span>Annotate</span><span>Modify</span></div>
+                <div class="rv-tools"><span class="rv-tool hot">✛</span><span class="rv-tool">⤴</span><span class="rv-tool">◎</span><span class="rv-tool">▦</span><span class="rv-tool">⊕</span></div>
+              </div>
+              <div class="rv-main">
+                <div class="rv-side">
+                  <div class="rv-pal">Properties</div>
+                  <div class="rv-prow"><span class="k">Survey set</span><span class="v hot">ABS-001</span></div>
+                  <div class="rv-prow"><span class="k">Points</span><span class="v">4 nested</span></div>
+                  <div class="rv-prow"><span class="k">Export</span><span class="v">Trimble</span></div>
+                  <div class="rv-pal">Project Browser</div>
+                  <div class="rv-tree">
+                    <span class="on">L2 Power Plan</span>
+                    <span class="ind">Survey Points</span>
+                    <span>Schedules</span>
+                    <span class="ind">Point Export</span>
+                  </div>
+                </div>
+                <div class="rv-view">
+                  <span class="rv-badge pts">+ 4 survey points</span>
+                  <div class="rp-room"></div>
+                  <div class="rp-clear" style="left:14%;top:28%;width:34%;height:42%"></div>
+                  <div class="rp-zone" style="left:17%;top:34%;width:28%;height:30%"></div>
+                  <div class="rp-equip" style="left:24%;top:42%;width:11%;height:14%"></div>
+                  <div class="rp-tag" style="left:20%;top:28%">EQ-04</div>
+                  <span class="rp-pt" style="left:24%;top:42%"></span><span class="rp-pt" style="left:35%;top:42%"></span>
+                  <span class="rp-pt" style="left:24%;top:56%"></span><span class="rp-pt" style="left:35%;top:56%"></span>
+                  <div class="csv-dark">
+                    <div class="ch"><span>ABS-001_survey.csv</span><span>4 pts</span></div>
+                    <div class="cb">
+                      <div class="r1">id,northing,easting,elev</div>
+                      P1,154820.4,49210.1,3.05<br />
+                      P2,154821.9,49211.6,3.05<br />
+                      P3,154820.4,49212.8,3.05
+                    </div>
+                  </div>
+                  <span class="rv-vlabel">Plan · L2 · 1:25</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 3 -->
+    <div class="frow reveal">
+      <div class="frow-copy">
+        <div class="ficon">✓</div>
+        <h3>Validation &amp; clearance</h3>
+        <p>Every family runs through automated checks — geometry, embedded data, and real maintenance clearance zones — so conflicts are caught in the model, before they ever reach the field.</p>
+        <div class="chips"><span class="chip">Clearance zones</span><span class="chip">Data completeness</span><span class="chip">Clash-ready</span></div>
+        <a class="linkmore" href="#">How validation works <span class="arr">→</span></a>
+      </div>
+      <div class="frow-media">
+        <div class="media-frame dark">
+          <div class="mbar"><div class="winicon" style="width:13px;height:13px;border-width:1.5px;"></div><span style="font-family:var(--font-mono);font-size:10.5px;color:var(--on-dark-mid);margin-left:8px;">Autodesk Revit — APEX Validation</span><div class="traffic"><i></i><i></i><i></i></div></div>
+          <div class="mbody" style="padding:0;">
+            <div class="revit-ui">
+              <div class="rv-ribbon">
+                <div class="rv-tabs"><span>File</span><span>Systems</span><span class="on">APEX</span><span>Modify</span></div>
+                <div class="rv-tools"><span class="rv-tool hot">✓</span><span class="rv-tool">▤</span><span class="rv-tool">≣</span><span class="rv-tool">⊕</span></div>
+              </div>
+              <div class="rv-main">
+                <div class="rv-side">
+                  <div class="rv-pal">Properties</div>
+                  <div class="rv-prow"><span class="k">Family</span><span class="v hot">APS-MV-001</span></div>
+                  <div class="rv-prow"><span class="k">Checks</span><span class="v">8 total</span></div>
+                  <div class="rv-prow"><span class="k">Result</span><span class="v">7 pass</span></div>
+                  <div class="rv-pal">Project Browser</div>
+                  <div class="rv-tree">
+                    <span class="on">APEX Validation</span>
+                    <span class="ind">Clearance Check</span>
+                    <span>Families</span>
+                  </div>
+                </div>
+                <div class="rv-view">
+                  <div class="val-list dk">
+                    <div class="val-row"><span class="vk">✓</span>Geometry &amp; connectors<span class="vstat">PASS</span></div>
+                    <div class="val-row"><span class="vk">✓</span>Maintenance clearance zone<span class="vstat">PASS</span></div>
+                    <div class="val-row"><span class="vk">✓</span>Voltage &amp; system data<span class="vstat">PASS</span></div>
+                    <div class="val-row"><span class="vk">✓</span>Survey points nested<span class="vstat">4 / 4</span></div>
+                    <div class="val-row warn"><span class="vk">!</span>Procurement data<span class="vstat">REVIEW</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 4 -->
+    <div class="frow flip reveal">
+      <div class="frow-copy">
+        <div class="ficon">≣</div>
+        <h3>Project intelligence</h3>
+        <p>Track every family, version, and validation across the project. Push content straight into Autodesk Construction Cloud and BIM 360, with full version control and rollback.</p>
+        <div class="chips"><span class="chip">ACC &amp; BIM 360 sync</span><span class="chip">Version control</span><span class="chip">Dashboards</span></div>
+        <a class="linkmore" href="#">Explore intelligence <span class="arr">→</span></a>
+      </div>
+      <div class="frow-media">
+        <div class="media-frame dark">
+          <div class="mbar"><div class="winicon" style="width:13px;height:13px;border-width:1.5px;"></div><span style="font-family:var(--font-mono);font-size:10.5px;color:var(--on-dark-mid);margin-left:8px;">APEX Console — Autodesk Construction Cloud</span><div class="traffic"><i></i><i></i><i></i></div></div>
+          <div class="mbody" style="padding:0;">
+            <div class="revit-ui">
+              <div class="rv-ribbon">
+                <div class="rv-tabs"><span>Overview</span><span class="on">Project Intelligence</span><span>Versions</span><span>Sync</span></div>
+                <div class="rv-tools"><span class="rv-tool hot">≣</span><span class="rv-tool">☁</span><span class="rv-tool">◉</span><span class="rv-tool">⟲</span></div>
+              </div>
+              <div class="rv-main">
+                <div class="rv-side">
+                  <div class="rv-pal">Project</div>
+                  <div class="rv-prow"><span class="k">Campus</span><span class="v hot">Alpha</span></div>
+                  <div class="rv-prow"><span class="k">Sync</span><span class="v">ACC ✓</span></div>
+                  <div class="rv-prow"><span class="k">BIM 360</span><span class="v">Live</span></div>
+                  <div class="rv-pal">Browser</div>
+                  <div class="rv-tree">
+                    <span class="on">Dashboards</span>
+                    <span class="ind">Generation</span>
+                    <span>Version History</span>
+                  </div>
+                </div>
+                <div class="rv-view">
+                  <div class="dash dk">
+                    <div class="dtop">
+                      <div class="kpi"><div class="kv">1,284</div><div class="kl">Families generated</div></div>
+                      <div class="kpi"><div class="kv">98<span class="u">%</span></div><div class="kl">Validation pass rate</div></div>
+                      <div class="kpi"><div class="kv">312<span class="u">h</span></div><div class="kl">Hours saved</div></div>
+                    </div>
+                    <div class="chart">
+                      <div class="bar" style="height:100%"><i style="height:46%"></i></div>
+                      <div class="bar" style="height:100%"><i style="height:62%"></i></div>
+                      <div class="bar" style="height:100%"><i style="height:54%"></i></div>
+                      <div class="bar" style="height:100%"><i style="height:78%"></i></div>
+                      <div class="bar" style="height:100%"><i style="height:70%"></i></div>
+                      <div class="bar" style="height:100%"><i style="height:92%"></i></div>
+                      <div class="bar" style="height:100%"><i style="height:84%"></i></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ AS-BUILT INTELLIGENCE ═══ -->
+<section class="asbuilt pad" id="asbuilt">
+  <div class="ab-glow"></div>
+  <div class="wrap">
+    <div class="section-head center reveal" style="margin:0 auto;">
+      <span class="eyebrow">As-built intelligence</span>
+      <h2>From design intent to verified as-built.</h2>
+      <p class="lead">Most BIM models become inaccurate the moment construction begins. APEX keeps your model aligned with field reality — connecting BIM, survey, layout, and as-built data into a single workflow.</p>
+    </div>
+
+    <!-- workflow rail -->
+    <div class="ab-flow reveal">
+      <div class="ab-rail"></div>
+      <div class="ab-steps">
+        <div class="ab-step"><div class="ab-ico">▤</div><div class="ab-lbl">Shop Drawings</div><p>PDFs, submittals &amp; manufacturer data in.</p></div>
+        <div class="ab-step"><div class="ab-ico">✦</div><div class="ab-lbl">AI Family Generation</div><p>Intelligent Revit families, built automatically.</p></div>
+        <div class="ab-step"><div class="ab-ico">✛</div><div class="ab-lbl">Survey Point Creation</div><p>Layout points nested in every family.</p></div>
+        <div class="ab-step"><div class="ab-ico">◎</div><div class="ab-lbl">Field Layout</div><p>Points exported to total stations &amp; robots.</p></div>
+        <div class="ab-step"><div class="ab-ico">✓</div><div class="ab-lbl">As-Built Verification</div><p>Field data compared to design intent.</p></div>
+        <div class="ab-step"><div class="ab-ico">⬡</div><div class="ab-lbl">Updated BIM Model</div><p>Model kept accurate through turnover.</p></div>
+      </div>
+    </div>
+
+    <!-- feature cards -->
+    <div class="ab-cards reveal">
+      <div class="ab-card">
+        <div class="ci">✦</div>
+        <h3>AI Family Generation</h3>
+        <p>Convert shop drawings, submittals, and manufacturer data into intelligent Revit families — automatically.</p>
+      </div>
+      <div class="ab-card">
+        <div class="ci">✛</div>
+        <h3>Survey &amp; Layout Intelligence</h3>
+        <p>Generate Trimble, Leica, Topcon, and Autodesk survey points directly from BIM content.</p>
+      </div>
+      <div class="ab-card">
+        <div class="ci">◎</div>
+        <h3>As-Built Verification</h3>
+        <p>Compare field-collected survey data against design intent and flag deviations automatically.</p>
+      </div>
+      <div class="ab-card">
+        <div class="ci">⬡</div>
+        <h3>Digital Twin Ready</h3>
+        <p>Maintain continuously accurate BIM models throughout construction and turnover.</p>
+      </div>
+    </div>
+
+    <!-- callout -->
+    <div class="ab-callout reveal">
+      <p>The future of BIM isn't creating models. <em>It's keeping them accurate.</em></p>
+    </div>
+
+    <!-- CTAs -->
+    <div class="ab-cta reveal">
+      <a class="btn btn-eb btn-lg" href="#">Learn about As-Built Intelligence <span class="arr">→</span></a>
+      <a class="btn btn-ghost on-dark btn-lg" href="#demo">Book a demo</a>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ MODELING TOOLSET ═══ -->
+<section class="pad-sm" id="toolset">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">Modeling toolset</span>
+      <h2>Detailing in Revit, done right.</h2>
+      <p class="lead">Beyond AI generation, APEX ships an all-in-one Revit add-in — the everyday modeling tools MEP teams reach for, built by people who've actually detailed and installed the work.</p>
+      <div class="ts-tabs" id="tsTabs">
+        <button class="ts-tab active" data-disc="elec">⚡ Electrical</button>
+        <button class="ts-tab" data-disc="mech">⚙ Mechanical</button>
+      </div>
+    </div>
+
+    <div class="toolset reveal" data-disc="elec">
+      <div class="tool"><div class="ti">⤳</div><h3>Auto-Route Conduit</h3><p>Route whole conduit runs automatically, straight from your run schedules.</p></div>
+      <div class="tool"><div class="ti">↪</div><h3>Smart Bends</h3><p>Parametric bend families model conduit bends faster — and more accurately.</p></div>
+      <div class="tool"><div class="ti">⊓</div><h3>Hangers &amp; Trapeze</h3><p>Drop clash-free multi-tier trapeze racks and hangers in seconds.</p></div>
+      <div class="tool"><div class="ti">▣</div><h3>Sleeves &amp; Box-Outs</h3><p>Auto-place sleeves and box-outs from your own customizable rule sets.</p></div>
+      <div class="tool"><div class="ti">▤</div><h3>Cable Tray Clearance</h3><p>Lay in cable tray and fine-tune clearance zones exactly where it's tight.</p></div>
+      <div class="tool"><div class="ti">✛</div><h3>Layout Points</h3><p>Place, view, and edit field points for layout and coordination — export-ready.</p></div>
+      <div class="tool"><div class="ti">▦</div><h3>Spooling &amp; Sheets</h3><p>Select elements, assign a spool, and auto-build spool sheets, views &amp; schedules.</p></div>
+      <div class="tool"><div class="ti">❏</div><h3>Family Library</h3><p>Organize, filter, and search your families by their parameter values.</p></div>
+      <div class="tool"><div class="ti">⊕</div><h3>Connector Placement</h3><p>Drop connectors onto open conduit ends and smart bends in one pass.</p></div>
+      <div class="tool"><div class="ti">▢</div><h3>Pull Boxes</h3><p>Break a conduit run at any point and place a pull box on the selection.</p></div>
+      <div class="tool"><div class="ti">≣</div><h3>Duct Bank Spacers</h3><p>Auto-place spacer families along a selected group of conduits.</p></div>
+      <div class="tool"><div class="ti">◫</div><h3>Custom Ribbon &amp; Toolbox</h3><p>Build your own APEX tab and a tailored collection of Revit tools.</p></div>
+    </div>
+
+    <div class="toolset reveal" data-disc="mech" hidden>
+      <div class="tool"><div class="ti">⤳</div><h3>Auto-Route Duct</h3><p>Route rectangular and round duct automatically from your run schedules.</p></div>
+      <div class="tool"><div class="ti">◠</div><h3>Auto-Route Pipe</h3><p>Lay pipe with correct fittings, slopes, and tap-ins generated for you.</p></div>
+      <div class="tool"><div class="ti">⊓</div><h3>Hangers &amp; Trapeze</h3><p>Place clash-free trapeze racks and rod hangers across duct and pipe.</p></div>
+      <div class="tool"><div class="ti">◎</div><h3>Insulation &amp; Wrap</h3><p>Apply insulation thickness and wrap to selected systems in one move.</p></div>
+      <div class="tool"><div class="ti">⬡</div><h3>Valves &amp; Fittings</h3><p>Drop valves, unions, and fittings onto pipe runs with the right connectors.</p></div>
+      <div class="tool"><div class="ti">✛</div><h3>Layout Points</h3><p>Place and export field points for hangers, sleeves, and equipment anchors.</p></div>
+      <div class="tool"><div class="ti">▦</div><h3>Spooling &amp; Sheets</h3><p>Assign spools and auto-build fabrication sheets, views &amp; schedules.</p></div>
+      <div class="tool"><div class="ti">▣</div><h3>Sleeves &amp; Penetrations</h3><p>Auto-place wall and floor penetrations from customizable rule sets.</p></div>
+      <div class="tool"><div class="ti">⚖</div><h3>Seismic Bracing</h3><p>Generate code-compliant seismic bracing along duct and pipe runs.</p></div>
+      <div class="tool"><div class="ti">▤</div><h3>Equipment Clearance</h3><p>Model maintenance and pull space around skids, AHUs, and pumps.</p></div>
+      <div class="tool"><div class="ti">❏</div><h3>Family Library</h3><p>Organize, filter, and search mechanical families by parameter values.</p></div>
+      <div class="tool"><div class="ti">◫</div><h3>Custom Ribbon &amp; Toolbox</h3><p>Build your own APEX tab and a tailored collection of Revit tools.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ TOOL SPOTLIGHT (deep-dive) ═══ -->
+<section class="pad-sm" id="spotlight">
+  <div class="wrap">
+    <div class="frow flip reveal">
+      <div class="frow-copy">
+        <span class="eyebrow">Tool spotlight · Auto-Route Conduit</span>
+        <h3 style="margin-top:18px;">From run schedule to routed model — automatically.</h3>
+        <p>Point APEX at a conduit run schedule and it routes the whole rack: parallel runs, smart bends at every turn, pull boxes at break points, and nested layout points along the path — clash-checked as it goes.</p>
+        <div class="chips">
+          <span class="chip">Schedule-driven</span>
+          <span class="chip">Smart bends</span>
+          <span class="chip">Pull boxes</span>
+          <span class="chip">Layout points</span>
+        </div>
+        <a class="linkmore" href="#">Watch the workflow <span class="arr">→</span></a>
+      </div>
+      <div class="frow-media">
+        <div class="media-frame dark">
+          <div class="mbar"><div class="winicon" style="width:13px;height:13px;border-width:1.5px;"></div><span style="font-family:var(--font-mono);font-size:10.5px;color:var(--on-dark-mid);margin-left:8px;">Autodesk Revit — Section: Conduit Rack</span><div class="traffic"><i></i><i></i><i></i></div></div>
+          <div class="mbody" style="padding:0;">
+            <div class="revit-ui">
+              <div class="rv-ribbon">
+                <div class="rv-tabs"><span>File</span><span>Systems</span><span class="on">APEX</span><span>Annotate</span><span>Modify</span></div>
+                <div class="rv-tools"><span class="rv-tool hot">⤳</span><span class="rv-tool">↪</span><span class="rv-tool">⊓</span><span class="rv-tool">▢</span><span class="rv-tool">⊕</span><span class="rv-tool">✛</span></div>
+              </div>
+              <div class="rv-main">
+                <div class="rv-side">
+                  <div class="rv-pal">Properties</div>
+                  <div class="rv-prow"><span class="k">View</span><span class="v hot">Section A-A</span></div>
+                  <div class="rv-prow"><span class="k">Run</span><span class="v">CR-12</span></div>
+                  <div class="rv-prow"><span class="k">Runs</span><span class="v">5 parallel</span></div>
+                  <div class="rv-prow"><span class="k">Support</span><span class="v">Trapeze</span></div>
+                  <div class="rv-pal">Project Browser</div>
+                  <div class="rv-tree">
+                    <span>Sections</span>
+                    <span class="ind on">Section A-A — Rack</span>
+                    <span class="ind">L2 Power Plan</span>
+                    <span>Schedules</span>
+                    <span class="ind">Conduit Run Schedule</span>
+                  </div>
+                </div>
+                <div class="rv-view">
+                  <span class="rv-badge pts">Conduit rack · 5 runs</span>
+                  <!-- structure + trapeze -->
+                  <div class="cr-slab"></div>
+                  <div class="cr-rod" style="left:26%"></div>
+                  <div class="cr-rod" style="left:74%"></div>
+                  <div class="cr-strut"></div>
+                  <!-- conduits seated on strut -->
+                  <div class="cr-conduit" style="left:33%;width:42px;height:42px"></div>
+                  <div class="cr-conduit" style="left:43%;width:54px;height:54px"></div>
+                  <div class="cr-conduit sel" style="left:54%;width:60px;height:60px"></div>
+                  <div class="cr-conduit" style="left:65%;width:46px;height:46px"></div>
+                  <div class="cr-conduit" style="left:73%;width:36px;height:36px"></div>
+                  <!-- size callouts -->
+                  <span class="cr-size" style="left:33%;top:30%">Ø2"</span>
+                  <span class="cr-size" style="left:43%;top:25%">Ø3"</span>
+                  <span class="cr-size hot" style="left:54%;top:22%">Ø4"</span>
+                  <span class="cr-size" style="left:65%;top:28%">Ø2½"</span>
+                  <span class="cr-size" style="left:73%;top:32%">Ø1½"</span>
+                  <!-- overall dimension -->
+                  <div class="cr-dimline"></div>
+                  <span class="cr-dimtxt">1067 mm</span>
+                  <span class="rv-vlabel">Section · A-A · 1:10</span>
+                  <span class="rv-badge gen"><span class="dot"></span>Auto-routed · clash-free</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ PROOF ═══ -->
+<section class="proof pad" id="proof">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">From the field</span>
+      <h2>Built for the people who live in the model.</h2>
+      <p class="lead">What teams gain when content is generated right the first time.</p>
+    </div>
+    <div class="proof-grid reveal">
+      <div class="pcard">
+        <div class="pmetric">40<span class="u">+ hrs</span></div>
+        <div class="ptitle">Reclaimed per project</div>
+        <p>Hours that used to go into building and fixing families by hand — redirected to coordination that actually moves the schedule.</p>
+        <div class="pwho">Electrical · VDC coordination</div>
+      </div>
+      <div class="pcard">
+        <div class="pmetric">1&#8209;click</div>
+        <div class="ptitle">Model to field</div>
+        <p>Nested survey points export straight to a layout CSV, so the crew sets out exactly what the coordinator modeled.</p>
+        <div class="pwho">Prefab · field layout</div>
+      </div>
+      <div class="pcard">
+        <div class="pmetric">0</div>
+        <div class="ptitle">First-pass clashes</div>
+        <p>Real clearance zones modeled into every family mean conflicts surface in clash detection, not during installation.</p>
+        <div class="pwho">General contractor · coordination</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ INTEGRATIONS MARQUEE ═══ -->
+<section class="integ pad-sm" id="integrations">
+  <div class="wrap">
+    <div class="section-head center reveal">
+      <span class="eyebrow">Integrations</span>
+      <h2>Connect your workflow.</h2>
+      <p class="lead">APEX fits the tools your team already runs — from authoring to the field.</p>
+    </div>
+  </div>
+  <div class="marquee reveal">
+    <div class="mtrack" id="mtrack">
+      <span class="itile"><span class="hex"></span>Autodesk Revit</span>
+      <span class="itile"><span class="hex"></span>Construction Cloud</span>
+      <span class="itile"><span class="hex"></span>BIM 360</span>
+      <span class="itile"><span class="hex"></span>Trimble</span>
+      <span class="itile"><span class="hex"></span>Navisworks</span>
+      <span class="itile"><span class="hex"></span>Procore</span>
+      <span class="itile"><span class="hex"></span>Bluebeam</span>
+      <span class="itile"><span class="hex"></span>ReCap</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ AWARDS ═══ -->
+<section class="awards pad-sm">
+  <div class="wrap">
+    <div class="row">
+      <div class="award"><div class="medal">★</div>Backed by<br />construction pros</div>
+      <div class="award"><div class="medal">◷</div>47s avg<br />generation</div>
+      <div class="award"><div class="medal">⛉</div>Enterprise-grade<br />data security</div>
+      <div class="award"><div class="medal">⤴</div>Trimble &amp; Autodesk<br />field-ready</div>
+      <div class="award"><div class="medal">◎</div>100% as-modeled<br />layout match</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ FINAL CTA ═══ -->
+<section class="cta pad" id="demo">
+  <div class="glow"></div>
+  <div class="wrap">
+    <div class="inner reveal">
+      <span class="eyebrow on-dark" style="justify-content:center;">Get started</span>
+      <h2>See APEX turn your drawing into a family.</h2>
+      <p>Book a 20-minute demo and bring a real shop drawing. We'll generate a construction-ready family live — clearance zones, embedded data, and field-ready survey points included.</p>
+      <div class="row">
+        <a class="btn btn-primary btn-lg" href="#">Book a demo <span class="arr">→</span></a>
+        <a class="btn btn-ghost on-dark btn-lg" href="#">Join the waitlist</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ FOOTER ═══ -->
+<footer class="site">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-brand">
+        <a class="brand" href="#top"><span class="mark"></span>APEX <span class="bim">BIM</span> STUDIO</a>
+        <p>The intelligent layer between BIM, the field, and everything in between. Built by construction professionals.</p>
+      </div>
+      <div class="foot-col">
+        <h4>Product</h4>
+        <a href="product.html">AI Family Generator</a>
+        <a href="survey.html">Survey &amp; Layout</a>
+        <a href="integrations.html">Integrations</a>
+        <a href="pricing.html">Pricing</a>
+        <a href="demo.html">Book a demo</a>
+      </div>
+      <div class="foot-col">
+        <h4>Company</h4>
+        <a href="about.html">About</a>
+        <a href="#">Blog</a>
+        <a href="#">Careers</a>
+        <a href="demo.html">Contact</a>
+      </div>
+      <div class="foot-col">
+        <h4>Resources</h4>
+        <a href="#">Documentation</a>
+        <a href="demo.html">Waitlist</a>
+        <a href="#">Log in</a>
+        <a href="#">Status</a>
+      </div>
+    </div>
+    <div class="foot-meta">
+      <span>APEX BIM Studio · Millville, Utah · Building the future of construction data</span>
+      <span>© 2026 APEX BIM Studio</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, { threshold: 0.1 });
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+
+  // duplicate marquee for seamless loop
+  const mt = document.getElementById('mtrack');
+  if (mt) mt.innerHTML += mt.innerHTML;
+
+  // toolset discipline tabs (Electrical / Mechanical)
+  (function () {
+    const tabs = document.getElementById('tsTabs');
+    if (!tabs) return;
+    tabs.addEventListener('click', (e) => {
+      const btn = e.target.closest('.ts-tab');
+      if (!btn) return;
+      const disc = btn.dataset.disc;
+      tabs.querySelectorAll('.ts-tab').forEach(t => t.classList.toggle('active', t === btn));
+      document.querySelectorAll('.toolset[data-disc]').forEach(g => { g.hidden = (g.dataset.disc !== disc); });
+    });
+  })();
+
+
+  /* ═══ INTERACTIVE PRODUCT SIMULATION ═══ */
+  (function () {
+    const sim = document.getElementById('sim');
+    if (!sim) return;
+
+    const SAMPLES = {
+      mv: {
+        title: 'Apex Data Campus Alpha', fmt: 'PDF', tag: 'APS-MV-001',
+        sheet: 'ABS.300 · ELECTRICAL CONNECTIONS',
+        labels: [['left:2%;top:8%;', '15 kV / 3PH'], ['right:2%;top:2%;', 'APS-MV-001'], ['left:14%;bottom:1%;', 'CLEARANCE 1830']],
+        groups: [
+          ['Identity', [['Equipment ID', 'APS-MV-001', true], ['Voltage', '15 kV / 3PH', false], ['System', 'MV Power', false]]],
+          ['Location & clearance', [['Location', 'Campus Alpha · L2', false], ['Clearance zone', '1830 mm', true], ['Survey points', '4 nested', false]]],
+          ['Integration', [['Trimble export', 'Enabled ✓', false], ['ACC integration', 'Enabled ✓', false]]]
+        ],
+        pts: 4, time: 51, prefix: 'MV',
+        csv: [['P1', '154820.4', '49210.1', '3.05'], ['P2', '154821.9', '49211.6', '3.05'], ['P3', '154820.4', '49212.8', '3.05'], ['P4', '154821.9', '49214.2', '3.05']]
+      },
+      lv: {
+        title: 'Apex Data Campus Alpha', fmt: 'PDF', tag: 'APS-LV-002',
+        sheet: 'ABS.300 · ELECTRICAL CONNECTIONS',
+        labels: [['left:2%;top:8%;', '480V / 3PH'], ['right:2%;top:2%;', 'APS-LV-002'], ['left:14%;bottom:1%;', 'CLEARANCE 1067']],
+        groups: [
+          ['Identity', [['Equipment ID', 'APS-LV-002', true], ['Voltage', '480V / 3PH', false], ['System', 'LV Distribution', false]]],
+          ['Location & clearance', [['Location', 'Campus Alpha · L2', false], ['Clearance zone', '1067 mm', true], ['Survey points', '4 nested', false]]],
+          ['Integration', [['Trimble export', 'Enabled ✓', false], ['ACC integration', 'Enabled ✓', false]]]
+        ],
+        pts: 4, time: 44, prefix: 'LV',
+        csv: [['P1', '154833.0', '49250.4', '3.10'], ['P2', '154835.6', '49253.1', '3.10'], ['P3', '154833.0', '49256.0', '3.10'], ['P4', '154835.6', '49258.7', '3.10']]
+      },
+      xfr: {
+        title: 'Apex Data Campus Alpha', fmt: 'PDF', tag: 'APS-XFR-003',
+        sheet: 'ABS.200 · GENERAL ARRANGEMENT',
+        labels: [['left:2%;top:8%;', '15kV → 480V'], ['right:2%;top:2%;', 'APS-XFR-003'], ['left:14%;bottom:1%;', 'CLEARANCE 1219']],
+        groups: [
+          ['Identity', [['Equipment ID', 'APS-XFR-003', true], ['Voltage', '15kV → 480V', false], ['System', 'Transformer', false]]],
+          ['Location & clearance', [['Location', 'Campus Alpha · Yard', false], ['Clearance zone', '1219 mm', true], ['Survey points', '4 nested', false]]],
+          ['Integration', [['Trimble export', 'Enabled ✓', false], ['ACC integration', 'Enabled ✓', false]]]
+        ],
+        pts: 4, time: 47, prefix: 'XF',
+        csv: [['P1', '154810.2', '49200.0', '3.45'], ['P2', '154811.7', '49201.5', '3.45'], ['P3', '154813.2', '49203.0', '3.45'], ['P4', '154810.2', '49204.5', '3.45']]
+      },
+      ahu: {
+        title: 'Apex Data Campus Alpha', fmt: 'PDF', tag: 'APS-AHU-010',
+        sheet: 'ABS.200 · MECHANICAL ARRANGEMENT',
+        labels: [['left:2%;top:8%;', '12,000 CFM'], ['right:2%;top:2%;', 'APS-AHU-010'], ['left:14%;bottom:1%;', 'CLEARANCE 1067']],
+        groups: [
+          ['Identity', [['Equipment ID', 'APS-AHU-010', true], ['Airflow', '12,000 CFM', false], ['System', 'Supply Air', false]]],
+          ['Location & clearance', [['Location', 'Campus Alpha · L3', false], ['Clearance zone', '1067 mm', true], ['Survey points', '4 nested', false]]],
+          ['Integration', [['Trimble export', 'Enabled ✓', false], ['ACC integration', 'Enabled ✓', false]]]
+        ],
+        pts: 4, time: 49, prefix: 'AH',
+        csv: [['P1', '154840.1', '49270.2', '3.30'], ['P2', '154842.6', '49272.8', '3.30'], ['P3', '154840.1', '49275.4', '3.30'], ['P4', '154842.6', '49278.0', '3.30']]
+      },
+      chp: {
+        title: 'Apex Data Campus Alpha', fmt: 'PDF', tag: 'APS-CHP-011',
+        sheet: 'ABS.200 · MECHANICAL ARRANGEMENT',
+        labels: [['left:2%;top:8%;', '1,200 GPM'], ['right:2%;top:2%;', 'APS-CHP-011'], ['left:14%;bottom:1%;', 'CLEARANCE 914']],
+        groups: [
+          ['Identity', [['Equipment ID', 'APS-CHP-011', true], ['Flow', '1,200 GPM', false], ['System', 'Ethylene Glycol', false]]],
+          ['Location & clearance', [['Location', 'Campus Alpha · Plant', false], ['Clearance zone', '914 mm', true], ['Survey points', '4 nested', false]]],
+          ['Integration', [['Trimble export', 'Enabled ✓', false], ['ACC integration', 'Enabled ✓', false]]]
+        ],
+        pts: 4, time: 43, prefix: 'CH',
+        csv: [['P1', '154850.4', '49290.1', '3.05'], ['P2', '154852.0', '49292.6', '3.05'], ['P3', '154850.4', '49295.0', '3.05'], ['P4', '154852.0', '49297.5', '3.05']]
+      },
+      crac: {
+        title: 'Apex Data Campus Alpha', fmt: 'PDF', tag: 'APS-CRAC-013',
+        sheet: 'ABS.200 · MECHANICAL ARRANGEMENT',
+        labels: [['left:2%;top:8%;', '30 kW'], ['right:2%;top:2%;', 'APS-CRAC-013'], ['left:14%;bottom:1%;', 'CLEARANCE 1067']],
+        groups: [
+          ['Identity', [['Equipment ID', 'APS-CRAC-013', true], ['Capacity', '30 kW', false], ['System', 'Computer-Room AC', false]]],
+          ['Location & clearance', [['Location', 'Campus Alpha · Data Hall', false], ['Clearance zone', '1067 mm', true], ['Survey points', '4 nested', false]]],
+          ['Integration', [['Trimble export', 'Enabled ✓', false], ['ACC integration', 'Enabled ✓', false]]]
+        ],
+        pts: 4, time: 46, prefix: 'CR',
+        csv: [['P1', '154860.0', '49310.4', '3.10'], ['P2', '154861.6', '49312.9', '3.10'], ['P3', '154860.0', '49315.3', '3.10'], ['P4', '154861.6', '49317.8', '3.10']]
+      }
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const els = {
+      chips: $('simChips'), status: $('simStatus'), run: $('simRun'), reset: $('simReset'),
+      title: $('simTitle'), fmt: $('simFmt'), sheet: $('simSheet'), lineart: $('simLineart'),
+      outBadge: $('simOutBadge'), procText: $('simProcText'), ptsBadge: $('simPtsBadge'), timer: $('simTimer'),
+      skel: $('simSkel'), fill: $('simFill'), checks: $('simChecks'), bar: $('simBar'), export: $('simExport'),
+      drawer: $('simDrawer'), drawerName: $('simDrawerName'), drawerMeta: $('simDrawerMeta'), drawerBody: $('simDrawerBody'),
+      rpTag: $('simRpTag'),
+      rtab: $('simRtab')
+    };
+
+    let current = 'mv';
+    let timers = [];
+    const wait = (ms) => new Promise(r => { const t = setTimeout(r, ms); timers.push(t); });
+    const clearTimers = () => { timers.forEach(clearTimeout); timers = []; };
+
+    const VAL_CHECKS = ['Geometry & connectors', 'Maintenance clearance zone', 'Voltage & system data',
+      'Connector parameters', 'Shared parameters', 'Survey points nested', 'Naming standard', 'Procurement data'];
+
+    function loadSample(key) {
+      const s = SAMPLES[key];
+      els.title.textContent = s.title;
+      els.fmt.textContent = s.fmt;
+      els.sheet.textContent = s.sheet;
+      const L = s.labels.map(l => l[1]);
+      const parts = s.sheet.split(' · ');
+      const title = (parts[1] || '').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+      els.lineart.innerHTML = `
+        <div class="sd-elev">
+          <div class="row" style="top:30%"></div>
+          <div class="row" style="top:58%"></div>
+          <div class="np"></div>
+          <span class="sd-term" style="left:16%;bottom:7%"></span>
+          <span class="sd-term" style="left:36%;bottom:7%"></span>
+          <span class="sd-term" style="left:56%;bottom:7%"></span>
+          <span class="sd-term" style="left:76%;bottom:7%"></span>
+        </div>
+        <div class="sd-dimv"></div>
+        <div class="sd-plan"><div class="clr"></div><div class="eqp"></div></div>
+        <div class="sd-dimh"></div>
+        <span class="lbl" style="left:5%;top:1%">${L[0] || ''}</span>
+        <span class="lbl" style="right:6%;top:1%">${L[1] || ''}</span>
+        <span class="lbl" style="right:6%;top:43%;color:var(--cyan)">${L[2] || ''}</span>
+        <div class="sd-tb">
+          <div class="c" style="flex:0 0 22%"><span>SHEET</span><b>${parts[0]}</b></div>
+          <div class="c" style="flex:1"><span>TITLE</span><b>${title}</b></div>
+          <div class="c" style="flex:0 0 28%"><span>EQUIP</span><b>${s.tag}</b></div>
+          <div class="c brand">APEX</div>
+        </div>`;
+      els.ptsBadge.textContent = '+ ' + s.pts + ' survey points';
+      els.timer.textContent = s.time;
+      if (els.rpTag) els.rpTag.textContent = s.tag;
+      if (els.rtab) {
+        const rp = s.sheet.split(' · ');
+        const rt = (rp[1] || '').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+        els.rtab.textContent = rp[0] + ' — ' + rt;
+      }
+      buildParams(s, false);
+    }
+
+    function resetUI() {
+      clearTimers();
+      sim.dataset.state = 'idle';
+      els.status.textContent = 'Ready to generate';
+      els.outBadge.textContent = 'Idle';
+      els.outBadge.classList.remove('on');
+      if (SAMPLES[current]) buildParams(SAMPLES[current], false);
+      els.checks.textContent = '0 / 8 checks';
+      els.bar.style.width = '0%';
+      els.export.disabled = true;
+      els.run.hidden = false;
+      els.reset.hidden = true;
+      els.drawer.hidden = true;
+      els.drawerBody.textContent = '';
+      els.chips.querySelectorAll('.sim-chip').forEach(c => c.disabled = false);
+    }
+
+    function buildParams(s, stagger) {
+      const row = ([k, v, b]) => `<div class="prow reveal-row${stagger ? '' : ' in'}"><span class="k">${k}</span><span class="v${b ? ' b' : ''}">${v}</span></div>`;
+      els.fill.innerHTML = s.groups.map(([label, rows]) =>
+        `<div class="ph">${label}</div>` + rows.map(row).join('')).join('');
+      if (stagger) {
+        const rows = els.fill.querySelectorAll('.reveal-row');
+        rows.forEach((r, i) => { const t = setTimeout(() => r.classList.add('in'), 100 * i); timers.push(t); });
+      }
+      return els.fill.querySelectorAll('.reveal-row').length;
+    }
+
+    async function run() {
+      const s = SAMPLES[current];
+      clearTimers();
+      els.run.hidden = true;
+      els.chips.querySelectorAll('.sim-chip').forEach(c => c.disabled = true);
+
+      // SCANNING
+      sim.dataset.state = 'scanning';
+      els.outBadge.textContent = 'Scanning';
+      const scanMsgs = ['Reading sheet…', 'Detecting geometry…', 'Extracting tags & dimensions…'];
+      for (let i = 0; i < scanMsgs.length; i++) { els.status.textContent = scanMsgs[i]; els.procText.textContent = scanMsgs[i]; await wait(750); }
+
+      // GENERATING
+      sim.dataset.state = 'generating';
+      els.outBadge.textContent = 'Building';
+      const genMsgs = ['Building Revit family…', 'Placing clearance zone…', 'Nesting survey points…'];
+      for (let i = 0; i < genMsgs.length; i++) { els.status.textContent = genMsgs[i]; els.procText.textContent = genMsgs[i]; await wait(680); }
+
+      // DONE — reveal geometry + params + validation
+      sim.dataset.state = 'done';
+      els.outBadge.textContent = '● Generated';
+      els.outBadge.classList.add('on');
+      buildParams(s, true);
+
+      // count up timer badge
+      let tv = 0; const target = s.time;
+      const ci = setInterval(() => { tv += Math.ceil(target / 14); if (tv >= target) { tv = target; clearInterval(ci); } els.timer.textContent = tv; }, 55);
+      timers.push(ci);
+
+      // validation checks tick up
+      els.status.textContent = 'Running validation…';
+      for (let i = 1; i <= 8; i++) {
+        await wait(140);
+        els.checks.textContent = i + ' / 8 checks';
+        els.bar.style.width = (i / 8 * 100) + '%';
+      }
+      els.status.textContent = 'Done — family is field-ready ✓';
+      els.export.disabled = false;
+      els.reset.hidden = false;
+    }
+
+    async function exportCSV() {
+      const s = SAMPLES[current];
+      els.export.disabled = true;
+      sim.dataset.state = 'exporting';
+      els.drawer.hidden = false;
+      els.drawerName.textContent = 'ABS-001_' + s.tag + '_survey.csv';
+      els.drawerMeta.textContent = 'exporting…';
+      els.status.textContent = 'Exporting field points…';
+      els.drawerBody.textContent = '';
+      const header = 'id,northing,easting,elev,tag';
+      const lines = [header, ...s.csv.map((r, i) => r.join(',') + ',' + s.prefix + String.fromCharCode(65 + i))];
+      for (let i = 0; i < lines.length; i++) {
+        await wait(180);
+        els.drawerBody.textContent += (i ? '\n' : '') + lines[i];
+      }
+      sim.dataset.state = 'exported';
+      els.drawerMeta.textContent = s.pts + ' pts · ready for Trimble / Autodesk ✓';
+      els.status.textContent = 'Exported ✓ — layout matches the model';
+    }
+
+    // wire events
+    els.chips.addEventListener('click', (e) => {
+      const btn = e.target.closest('.sim-chip');
+      if (!btn || btn.disabled) return;
+      els.chips.querySelectorAll('.sim-chip').forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      current = btn.dataset.sample;
+      loadSample(current);
+      resetUI();
+    });
+    // discipline toggle (Electrical / Mechanical)
+    const discTabs = document.getElementById('simDisc');
+    if (discTabs) {
+      discTabs.addEventListener('click', (e) => {
+        const tab = e.target.closest('.ts-tab');
+        if (!tab) return;
+        const disc = tab.dataset.disc;
+        discTabs.querySelectorAll('.ts-tab').forEach(t => t.classList.toggle('active', t === tab));
+        let first = null;
+        els.chips.querySelectorAll('.sim-chip').forEach(c => {
+          const match = c.dataset.disc === disc;
+          c.hidden = !match;
+          c.classList.remove('active');
+          if (match && !first) first = c;
+        });
+        if (first) { first.classList.add('active'); current = first.dataset.sample; loadSample(current); }
+        resetUI();
+      });
+    }
+    els.run.addEventListener('click', run);
+    els.reset.addEventListener('click', () => { loadSample(current); resetUI(); });
+    els.export.addEventListener('click', exportCSV);
+
+    loadSample('mv');
+    resetUI();
+  })();
+
+</script>
+</body>
+</html>
