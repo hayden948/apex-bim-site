@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -8,6 +9,20 @@ using System.Threading;
 using System.Threading.Tasks;
 
 namespace Apex.BimStudio;
+
+public class FamilySummary
+{
+    [JsonPropertyName("id")] public string Id { get; set; } = "";
+    [JsonPropertyName("family_name")] public string FamilyName { get; set; } = "";
+    [JsonPropertyName("category")] public string? Category { get; set; }
+    [JsonPropertyName("status")] public string? Status { get; set; }
+    [JsonPropertyName("revit_version")] public string? RevitVersion { get; set; }
+}
+
+public class FamilyList
+{
+    [JsonPropertyName("families")] public List<FamilySummary> Families { get; set; } = new List<FamilySummary>();
+}
 
 /// <summary>Thrown when the Apex API returns a non-success status; carries the response body.</summary>
 public class ApexApiException : Exception
@@ -49,7 +64,10 @@ public class ApexApiClient
             ?? Environment.GetEnvironmentVariable("APEX_API_URL")
             ?? "http://localhost:4000";
         _baseUrl = ValidateBaseUrl(url);
-        AccessToken = TokenStore.Load();
+        // Stored OAuth token wins; APEX_API_TOKEN is the service-token fallback
+        // (e.g. the Supabase publishable key for the hosted Apex API).
+        AccessToken = TokenStore.Load()
+            ?? Environment.GetEnvironmentVariable("APEX_API_TOKEN");
     }
 
     /// <summary>
@@ -68,6 +86,14 @@ public class ApexApiClient
 
     private string FamilyUrl(string id, string suffix = "")
         => _baseUrl + "/v1/families/" + Uri.EscapeDataString(id) + suffix;
+
+    public async Task<List<FamilySummary>> ListFamiliesAsync(CancellationToken ct = default)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Get, _baseUrl + "/v1/families");
+        string body = await SendAsync(req, ct).ConfigureAwait(false);
+        FamilyList? list = JsonSerializer.Deserialize<FamilyList>(body, Json);
+        return list?.Families ?? new List<FamilySummary>();
+    }
 
     public async Task<AfisObject?> GetFamilyAsync(string id, CancellationToken ct = default)
     {

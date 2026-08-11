@@ -98,6 +98,14 @@ class TestMain
         try { var _ = new ApexApiClient("https://api.apexbim.example"); Console.WriteLine("PASS  https accepted"); }
         catch (Exception e) { Console.WriteLine("FAIL  https rejected: " + e.Message); _failures++; }
 
+
+        // FamilySummary/FamilyList binding (Sync command payload)
+        string listJson = @"{""families"":[{""id"":""a11ce000-0000-4000-8000-000000000001"",""family_name"":""Panelboard 208V 42ckt"",""category"":""Electrical Equipment"",""status"":""ready"",""revit_version"":""2025""}]}";
+        var flist = JsonSerializer.Deserialize<FamilyList>(listJson, opts)!;
+        AssertTrue(flist.Families.Count == 1, "family list binds");
+        AssertTrue(flist.Families[0].FamilyName == "Panelboard 208V 42ckt", "family_name binds in summary");
+        AssertTrue(flist.Families[0].RevitVersion == "2025", "revit_version binds in summary");
+
         Console.WriteLine(_failures == 0 ? "\nALL TESTS PASSED" : $"\n{_failures} FAILURES");
         return _failures == 0 ? 0 : 1;
     }

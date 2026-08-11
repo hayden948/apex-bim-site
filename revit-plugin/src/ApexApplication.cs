@@ -36,9 +36,8 @@ public class ApexApplication : IExternalApplication
             RibbonPanel account = Panel(app, "Account");
             AddButton(account, asm, "ApexSignIn", "Sign In", typeof(SignInCommand),
                 "Sign in to Apex (OAuth PKCE)");
-            if (ShowPrototypes)
-                AddButton(account, asm, "ApexSync", "Sync", typeof(SyncCommand),
-                    "Sync the cloud AFIS library");
+            AddButton(account, asm, "ApexSync", "Sync", typeof(SyncCommand),
+                "Sync the cloud AFIS library and choose the active family");
 
             if (ShowPrototypes)
             {
@@ -60,9 +59,8 @@ public class ApexApplication : IExternalApplication
                 "Place the selected family");
 
             RibbonPanel validate = Panel(app, "Validate");
-            if (ShowPrototypes)
-                AddButton(validate, asm, "ApexQa", "Run QA", typeof(RunQaCommand),
-                    "Run the Apex QA Engine on the active family (Doc 8)");
+            AddButton(validate, asm, "ApexQa", "Run QA", typeof(RunQaCommand),
+                "Run the Apex QA Engine: local checks in the Family Editor, cloud QA otherwise (Doc 8)");
             AddButton(validate, asm, "ApexClearance", "Verify Clearances", typeof(VerifyClearancesCommand),
                 "Clash-check AFIS clearance zones");
 

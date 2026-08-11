@@ -60,8 +60,57 @@ public class SyncCommand : IExternalCommand
 {
     public Result Execute(ExternalCommandData c, ref string m, ElementSet e)
     {
-        TaskDialog.Show("Apex", "Library sync is not available in this build yet.");
-        return Result.Cancelled;
+        try
+        {
+            List<FamilySummary> families = ApexApiClient.RunSync(ct => Session.Api.ListFamiliesAsync(ct));
+            if (families.Count == 0)
+            {
+                TaskDialog.Show("Apex Sync", "The Apex library is empty — no families to sync yet.");
+                return Result.Succeeded;
+            }
+
+            // TaskDialog offers four command links; page beyond that when the library grows.
+            var dlg = new TaskDialog("Apex Sync")
+            {
+                MainInstruction = $"Synced {families.Count} famil{(families.Count == 1 ? "y" : "ies")} from the Apex library.",
+                MainContent = "Choose the family to make active (used by Place / QA / Export):",
+                CommonButtons = TaskDialogCommonButtons.Cancel,
+            };
+            int shown = Math.Min(families.Count, 4);
+            for (int i = 0; i < shown; i++)
+            {
+                FamilySummary f = families[i];
+                dlg.AddCommandLink(TaskDialogCommandLinkId.CommandLink1 + i,
+                    f.FamilyName, $"{f.Category ?? "?"} · {f.Status ?? "?"} · Revit {f.RevitVersion ?? "?"}");
+            }
+            if (families.Count > shown)
+                dlg.FooterText = $"{families.Count - shown} more not shown — the Library panel will list all.";
+
+            TaskDialogResult result = dlg.Show();
+            int pick = result switch
+            {
+                TaskDialogResult.CommandLink1 => 0,
+                TaskDialogResult.CommandLink2 => 1,
+                TaskDialogResult.CommandLink3 => 2,
+                TaskDialogResult.CommandLink4 => 3,
+                _ => -1,
+            };
+            if (pick < 0) return Result.Cancelled;
+
+            Session.ActiveFamilyId = families[pick].Id;
+            ApexLog.Info($"Active Apex family set to {families[pick].Id} ({families[pick].FamilyName}).");
+            TaskDialog.Show("Apex Sync",
+                $"Active family: {families[pick].FamilyName}\n\n" +
+                "Use Generate → From Library (in the Family Editor) to build it, " +
+                "or Place / Run QA / Export Layout against it.");
+            return Result.Succeeded;
+        }
+        catch (Exception ex)
+        {
+            ApexLog.Error("Library sync failed.", ex);
+            m = ex.Message;
+            return Result.Failed;
+        }
     }
 }
 
@@ -193,6 +242,13 @@ public class RunQaCommand : IExternalCommand
     {
         try
         {
+            Document? doc = c.Application.ActiveUIDocument?.Document;
+
+            // In the Family Editor: run the local QA checks against the open family.
+            if (doc != null && doc.IsFamilyDocument)
+                return RunLocalQa(doc);
+
+            // Otherwise: cloud QA Engine against the active library family (Doc 8).
             string id = Session.RequireActiveFamilyId();
             string result = ApexApiClient.RunSync(ct => Session.Api.ValidateAsync(id, ct));
             TaskDialog.Show("Apex QA (Doc 8)", result);
@@ -204,6 +260,79 @@ public class RunQaCommand : IExternalCommand
             m = ex.Message;
             return Result.Failed;
         }
+    }
+
+    /// <summary>
+    /// Local slice of the Doc 8 pipeline for the open family document:
+    /// P-rules (required Apex parameters), G-rules (geometry present, flex test).
+    /// The flex test runs inside a transaction that is always rolled back.
+    /// </summary>
+    private static Result RunLocalQa(Document doc)
+    {
+        var findings = new List<string>();
+        int errors = 0;
+        void Check(string rule, bool passed, string okMsg, string failMsg, bool isError = true)
+        {
+            findings.Add($"{(passed ? "PASS" : isError ? "ERROR" : "WARN")}  {rule}: {(passed ? okMsg : failMsg)}");
+            if (!passed && isError) errors++;
+        }
+
+        FamilyManager fm = doc.FamilyManager;
+
+        // P — profile completeness
+        foreach (string p in new[] { "Apex_Width", "Apex_Depth", "Apex_Height" })
+            Check($"P-dim ({p})", fm.get_Parameter(p) != null,
+                "parameter present", "required dimension parameter missing");
+        Check("P-3 (Apex_AfisId)", fm.get_Parameter("Apex_AfisId") != null,
+            "stamp parameter present", "families should carry an Apex_AfisId stamp", isError: false);
+
+        // G — geometry present
+        var solids = new FilteredElementCollector(doc)
+            .OfClass(typeof(Extrusion)).Cast<Extrusion>().ToList();
+        Check("G-solid", solids.Count > 0,
+            $"{solids.Count} extrusion(s) found", "family has no solid geometry");
+
+        // G-flex — drive Apex_Width +10% inside a rolled-back transaction and
+        // verify the geometry actually moves (the M2 acceptance check).
+        FamilyParameter widthParam = fm.get_Parameter("Apex_Width");
+        if (widthParam != null && solids.Count > 0 && fm.CurrentType != null)
+        {
+            bool flexed = false;
+            using (var tx = new Transaction(doc, "Apex QA: flex test (rolled back)"))
+            {
+                tx.Start();
+                try
+                {
+                    double? before = fm.CurrentType.AsDouble(widthParam);
+                    if (before is double w0 && w0 > 0)
+                    {
+                        BoundingBoxXYZ? bb0 = solids[0].get_BoundingBox(null);
+                        fm.Set(widthParam, w0 * 1.1);
+                        doc.Regenerate();
+                        BoundingBoxXYZ? bb1 = solids[0].get_BoundingBox(null);
+                        if (bb0 != null && bb1 != null)
+                            flexed = Math.Abs((bb1.Max.X - bb1.Min.X) - (bb0.Max.X - bb0.Min.X)) > 1e-6;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    ApexLog.Warn("Flex test failed to run: " + ex.Message);
+                }
+                finally
+                {
+                    tx.RollBack();
+                }
+            }
+            Check("G-flex (Apex_Width)", flexed,
+                "geometry follows the width parameter", "changing Apex_Width did not move geometry");
+        }
+
+        string verdict = errors == 0
+            ? "PASSED — no blocking errors."
+            : $"FAILED — {errors} blocking error(s). Export would be gated (Doc 8 §6).";
+        TaskDialog.Show("Apex QA (Doc 8) — local checks",
+            verdict + "\n\n" + string.Join("\n", findings));
+        return errors == 0 ? Result.Succeeded : Result.Failed;
     }
 }
 
