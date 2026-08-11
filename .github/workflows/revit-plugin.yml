@@ -1,0 +1,26 @@
+name: Build Revit plugin
+
+on:
+  push:
+    paths: ["revit-plugin/**"]
+  pull_request:
+    paths: ["revit-plugin/**"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Build (net48 + net8.0-windows)
+        run: dotnet build revit-plugin/src/ApexBimStudio.csproj -c Release
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ApexBimStudio
+          path: |
+            revit-plugin/src/bin/Release/net48/ApexBimStudio.dll
+            revit-plugin/src/bin/Release/net8.0-windows/ApexBimStudio.dll
