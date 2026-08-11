@@ -1,4 +1,16 @@
-# APEX BIM Studio — Marketing Homepage
+# APEX BIM Studio
+
+This repo now holds three components:
+
+| Directory | Component |
+|---|---|
+| `/` (root) | Marketing site (static HTML/CSS, described below) |
+| `revit-plugin/` | The ApexBimStudio Revit add-in — source, tests, CI. See `revit-plugin/README.md`. |
+| `supabase/` | Apex API v1 (edge function + migrations), deployed to the `apex-bim-studio` Supabase project. See `supabase/README.md`. |
+
+---
+
+## Marketing site
 
 Production-ready static implementation of the **Revizto-style** APEX BIM Studio homepage
 (implemented from the Claude Design handoff bundle).
