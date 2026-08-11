@@ -66,14 +66,12 @@ public class ApexApplication : IExternalApplication
             AddButton(validate, asm, "ApexClearance", "Verify Clearances", typeof(VerifyClearancesCommand),
                 "Clash-check AFIS clearance zones");
 
+            RibbonPanel layout = Panel(app, "Layout & Survey");
             if (ShowPrototypes)
-            {
-                RibbonPanel layout = Panel(app, "Layout & Survey");
                 AddButton(layout, asm, "ApexPoints", "Points", typeof(ManagePointsCommand),
                     "Manage survey/layout/anchor points");
-                AddButton(layout, asm, "ApexExport", "Export Layout", typeof(ExportLayoutCommand),
-                    "Export field points (Trimble/CSV/DXF)");
-            }
+            AddButton(layout, asm, "ApexExport", "Export Layout", typeof(ExportLayoutCommand),
+                "Export field points of placed Apex families (CSV, shared coordinates)");
 
             AddButton(Panel(app, "Schedules"), asm, "ApexSchedule", "Generate", typeof(GenerateScheduleCommand),
                 "Generate a schedule from Apex shared parameters");

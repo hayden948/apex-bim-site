@@ -313,10 +313,23 @@ public class ExportLayoutCommand : IExternalCommand
     {
         try
         {
-            string id = Session.RequireActiveFamilyId();
-            string csv = ApexApiClient.RunSync(ct => Session.Api.ExportPointsAsync(id, "csv", ct));
-            TaskDialog.Show("Apex Layout Export (Doc 7)", csv);
-            return Result.Succeeded;
+            // Cloud export when an Apex family is actively selected; otherwise a local
+            // CSV of placed Apex family instance positions, which works offline.
+            if (Session.ActiveFamilyId != null)
+            {
+                string csv = ApexApiClient.RunSync(ct =>
+                    Session.Api.ExportPointsAsync(Session.ActiveFamilyId!, "csv", ct));
+                TaskDialog.Show("Apex Layout Export (Doc 7)", csv);
+                return Result.Succeeded;
+            }
+
+            Document? doc = c.Application.ActiveUIDocument?.Document;
+            if (doc == null || doc.IsFamilyDocument)
+            {
+                TaskDialog.Show("Apex", "Open a project document to export layout points.");
+                return Result.Cancelled;
+            }
+            return ExportLocalPoints(doc, ref m);
         }
         catch (Exception ex)
         {
@@ -325,6 +338,71 @@ public class ExportLayoutCommand : IExternalCommand
             return Result.Failed;
         }
     }
+
+    /// <summary>
+    /// Exports the placement point of every family instance stamped with Apex_AfisId
+    /// as a field-layout CSV (id, family/type, easting, northing, elevation in both
+    /// feet and meters, using the project's shared coordinates).
+    /// </summary>
+    private static Result ExportLocalPoints(Document doc, ref string m)
+    {
+        var stamped = new FilteredElementCollector(doc)
+            .OfClass(typeof(FamilyInstance))
+            .Cast<FamilyInstance>()
+            .Select(fi => (Instance: fi,
+                AfisId: fi.LookupParameter("Apex_AfisId")?.AsString()
+                    ?? fi.Symbol?.LookupParameter("Apex_AfisId")?.AsString()))
+            .Where(t => !string.IsNullOrEmpty(t.AfisId) && t.Instance.Location is LocationPoint)
+            .ToList();
+
+        if (stamped.Count == 0)
+        {
+            TaskDialog.Show("Apex Layout Export (Doc 7)",
+                "No placed Apex families (Apex_AfisId) with point locations found in this project.");
+            return Result.Cancelled;
+        }
+
+        var dlg = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "Export Apex layout points",
+            Filter = "CSV files (*.csv)|*.csv",
+            FileName = "apex-layout-points.csv",
+        };
+        if (dlg.ShowDialog() != true) return Result.Cancelled;
+
+        // Shared coordinates: survey crews stake out against the survey point, not
+        // Revit's internal origin.
+        ProjectPosition pos = doc.ActiveProjectLocation.GetProjectPosition(XYZ.Zero);
+        double cos = Math.Cos(pos.Angle);
+        double sin = Math.Sin(pos.Angle);
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("afis_id,element_id,family,type,easting_ft,northing_ft,elevation_ft,easting_m,northing_m,elevation_m");
+        foreach ((FamilyInstance fi, string? afisId) in stamped)
+        {
+            XYZ p = ((LocationPoint)fi.Location).Point;
+            double east = p.X * cos - p.Y * sin + pos.EastWest;
+            double north = p.X * sin + p.Y * cos + pos.NorthSouth;
+            double elev = p.Z + pos.Elevation;
+            const double ftToM = 1.0 / UnitConv.MetersToFeet;
+            sb.AppendLine(string.Join(",",
+                Csv(afisId!), fi.Id.ToString(), Csv(fi.Symbol?.FamilyName ?? ""), Csv(fi.Name),
+                east.ToString("F4", System.Globalization.CultureInfo.InvariantCulture),
+                north.ToString("F4", System.Globalization.CultureInfo.InvariantCulture),
+                elev.ToString("F4", System.Globalization.CultureInfo.InvariantCulture),
+                (east * ftToM).ToString("F4", System.Globalization.CultureInfo.InvariantCulture),
+                (north * ftToM).ToString("F4", System.Globalization.CultureInfo.InvariantCulture),
+                (elev * ftToM).ToString("F4", System.Globalization.CultureInfo.InvariantCulture)));
+        }
+        System.IO.File.WriteAllText(dlg.FileName, sb.ToString());
+        ApexLog.Info($"Exported {stamped.Count} layout point(s) to {dlg.FileName}");
+        TaskDialog.Show("Apex Layout Export (Doc 7)",
+            $"Exported {stamped.Count} point(s) to:\n{dlg.FileName}");
+        return Result.Succeeded;
+    }
+
+    private static string Csv(string s)
+        => s.Contains(',') || s.Contains('"') ? "\"" + s.Replace("\"", "\"\"") + "\"" : s;
 }
 
 [Transaction(TransactionMode.Manual)]
