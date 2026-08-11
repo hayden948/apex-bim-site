@@ -15,7 +15,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="../src/**/*.cs" />
+    <!-- Exclude build output: obj/ holds generated AssemblyInfo files that
+         would collide with this project's own (CS0579). -->
+    <Compile Include="../src/**/*.cs" Exclude="../src/obj/**;../src/bin/**" />
   </ItemGroup>
 
   <ItemGroup>
