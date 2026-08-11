@@ -12,6 +12,8 @@
 //   POST /v1/families/:id/validate          QA Engine: staged rule checks (Doc 8)
 //   POST /v1/families/:id/exports           field points export (Doc 7), {"format":"csv"}
 //   POST /v1/families/:id/generate-rfa      QA-gated; enqueues a jobs row (Doc 3 Stage 11)
+//   POST /v1/families/:id/rfa               worker uploads the built .rfa {"content_base64","revit_version"?}
+//   GET  /v1/families/:id/rfa               download the built .rfa (binary)
 //   POST /v1/uploads                        {"filename","content_base64"} → storage + uploads row
 //   POST /v1/extractions                    {"upload_id"} → Claude extraction → extractions row
 //   GET  /v1/extractions/:id                extraction status + result
@@ -520,7 +522,7 @@ Deno.serve(async (req: Request) => {
 
   const { data: fam, error: famErr } = await supabase
     .from("families")
-    .select("id, family_name, category, status, afis")
+    .select("id, family_name, category, status, afis, rfa_storage_key, rfa_revit_version")
     .eq("id", id)
     .is("deleted_at", null)
     .maybeSingle();
@@ -584,6 +586,56 @@ Deno.serve(async (req: Request) => {
     }
     return new Response(lines.join("\n") + "\n", {
       headers: { "Content-Type": "text/csv; charset=utf-8" },
+    });
+  }
+
+  // Worker round-trip: the Revit plugin uploads the .rfa it built for this family.
+  if (action === "rfa" && req.method === "POST") {
+    // deno-lint-ignore no-explicit-any
+    let body: any;
+    try {
+      body = await req.json();
+    } catch {
+      return fail(400, "BAD_JSON", "Body must be JSON: {content_base64, revit_version?}");
+    }
+    if (typeof body?.content_base64 !== "string")
+      return fail(400, "MISSING_FIELDS", "content_base64 is required");
+    let bytes: Uint8Array;
+    try {
+      bytes = Uint8Array.from(atob(body.content_base64), (c) => c.charCodeAt(0));
+    } catch {
+      return fail(400, "BAD_BASE64", "content_base64 is not valid base64");
+    }
+    if (bytes.length === 0) return fail(400, "EMPTY_FILE", "File is empty");
+    if (bytes.length > 100 * 1024 * 1024) return fail(413, "FILE_TOO_LARGE", "Max 100 MB");
+
+    const storageKey = `${id}/${(fam.family_name || "family").replace(/[^\w.\-]/g, "_")}.rfa`;
+    const { error: upErr } = await supabase.storage.from("rfa").upload(storageKey, bytes, {
+      contentType: "application/octet-stream",
+      upsert: true,
+    });
+    if (upErr) return fail(500, "STORAGE_ERROR", upErr.message);
+
+    const { error: updErr } = await supabase.from("families").update({
+      rfa_storage_key: storageKey,
+      rfa_size_bytes: bytes.length,
+      rfa_revit_version: typeof body?.revit_version === "string" ? body.revit_version : null,
+      rfa_uploaded_at: new Date().toISOString(),
+    }).eq("id", id);
+    if (updErr) return fail(500, "DB_ERROR", updErr.message);
+    return json({ family_id: id, rfa_storage_key: storageKey, size_bytes: bytes.length }, 201);
+  }
+
+  if (action === "rfa" && req.method === "GET") {
+    if (!fam.rfa_storage_key)
+      return fail(404, "NO_RFA", `Family ${id} has no built .rfa yet; POST /generate-rfa and run the Revit worker`);
+    const { data: blob, error: dlErr } = await supabase.storage.from("rfa").download(fam.rfa_storage_key);
+    if (dlErr || !blob) return fail(500, "STORAGE_ERROR", dlErr?.message ?? "download failed");
+    return new Response(await blob.arrayBuffer(), {
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "Content-Disposition": `attachment; filename="${fam.rfa_storage_key.split("/").pop()}"`,
+      },
     });
   }
 

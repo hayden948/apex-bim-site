@@ -35,6 +35,8 @@ values ('workstation-01', encode(digest('apx_<random>', 'sha256'), 'hex'));
 | `POST /v1/families/{id}/validate` | QA Engine: staged S→P→G→Z→L rules, Doc 1 §5.8 finding shape, persisted to `family_validations` |
 | `POST /v1/families/{id}/exports` | Field points CSV (Doc 7) |
 | `POST /v1/families/{id}/generate-rfa` | QA-gated (no certificate, no export); enqueues a `jobs` row for the Revit worker |
+| `POST /v1/families/{id}/rfa` | Worker uploads the built `.rfa` (`{content_base64, revit_version?}` → `rfa` bucket, pointer on the family) |
+| `GET /v1/families/{id}/rfa` | Download the built `.rfa` (binary; 404 `NO_RFA` until the worker delivers) |
 | `POST /v1/uploads` | `{filename, content_base64}` → `uploads` storage bucket + row (30 MB cap, SHA-256 recorded) |
 | `POST /v1/extractions` | `{upload_id}` → Claude (Opus 5, structured output over the PDF) → `extractions` row |
 | `GET /v1/extractions/{id}` | Extraction status + result |
@@ -58,6 +60,8 @@ All endpoints were exercised end-to-end after deployment (via in-database
   201 (created a family whose generated AFIS then passed validate at score 1.0).
 - Jobs: list 200 → claim 200 (queued→running) → complete 200 (succeeded) →
   re-claim 409 `NOT_CLAIMABLE`.
+- RFA round-trip: GET 404 `NO_RFA` before → POST 201 (stored in the `rfa`
+  bucket) → GET 200 returning the exact uploaded bytes.
 
 Seed data: demo project/upload/extraction chain and one library family
 `Panelboard 208V 42ckt` (`a11ce000-0000-4000-8000-000000000001`) with a full
@@ -77,4 +81,3 @@ server-side, so several machines can drain the queue concurrently.
   project owner).
 - Per-user auth (Supabase JWT) with RLS-scoped projects; today the API runs
   against the demo project.
-- Uploading the built `.rfa` back to storage from the worker (`rfa_files` table).

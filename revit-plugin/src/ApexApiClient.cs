@@ -140,6 +140,24 @@ public class ApexApiClient
         return await SendAsync(req, ct).ConfigureAwait(false);
     }
 
+    /// <summary>Uploads a built .rfa back to the library (worker round-trip).</summary>
+    public async Task UploadRfaAsync(string id, byte[] rfaBytes, string? revitVersion,
+        CancellationToken ct = default)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Post, FamilyUrl(id, "/rfa"))
+        {
+            Content = new StringContent(
+                JsonSerializer.Serialize(new
+                {
+                    content_base64 = Convert.ToBase64String(rfaBytes),
+                    revit_version = revitVersion,
+                }, Json),
+                Encoding.UTF8,
+                "application/json"),
+        };
+        await SendAsync(req, ct).ConfigureAwait(false);
+    }
+
     // ----- jobs queue (Doc 3 Stage 11: the plugin is the generate_rfa worker) -----
 
     private string JobUrl(string id, string suffix = "")

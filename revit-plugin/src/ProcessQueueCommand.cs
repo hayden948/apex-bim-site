@@ -52,13 +52,23 @@ public class ProcessQueueCommand : IExternalCommand
                 try
                 {
                     string rfaPath = BuildRfa(app, claimed, outDir);
+
+                    // Round-trip: the library serves the .rfa afterwards (GET /families/:id/rfa).
+                    byte[] rfaBytes = System.IO.File.ReadAllBytes(rfaPath);
+                    string revitVersion = app.VersionNumber;
+                    ApexApiClient.RunSync<object?>(async ct =>
+                    {
+                        await Session.Api.UploadRfaAsync(claimed.EntityId!, rfaBytes, revitVersion, ct);
+                        return null;
+                    }, timeoutSeconds: 120);
+
                     ApexApiClient.RunSync<object?>(async ct =>
                     {
                         await Session.Api.CompleteJobAsync(claimed.Id, succeeded: true, ct: ct);
                         return null;
                     });
                     built++;
-                    report.Add($"OK    {claimed.Id.Substring(0, 8)}  →  {rfaPath}");
+                    report.Add($"OK    {claimed.Id.Substring(0, 8)}  →  {rfaPath} (uploaded)");
                 }
                 catch (Exception ex)
                 {
