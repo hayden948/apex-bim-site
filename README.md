@@ -4,9 +4,27 @@ This repo now holds three components:
 
 | Directory | Component |
 |---|---|
-| `/` (root) | Marketing site (static HTML/CSS, described below) |
+| `/` (root) | Marketing site (static HTML/CSS, described below) + `app.html` pipeline console |
 | `revit-plugin/` | The ApexBimStudio Revit add-in — source, tests, CI. See `revit-plugin/README.md`. |
 | `supabase/` | Apex API v1 (edge function + migrations), deployed to the `apex-bim-studio` Supabase project. See `supabase/README.md`. |
+| `tests/console/` | Browser tests for the pipeline console (mock API + Playwright, run in CI). |
+
+## The full loop (submittal → placed Revit family)
+
+1. **Sign up / sign in** on `app.html` (the pipeline console) and create a
+   project — you become its admin. Add teammates by email via the members API.
+2. **Upload** an equipment submittal PDF and run **AI extraction** (Claude reads
+   the drawing; needs the `ANTHROPIC_API_KEY` secret on the Supabase project).
+   Review the extracted dimensions/parameters with per-field confidence.
+3. **Approve** — the extraction becomes an AFIS 1.0 document in the family
+   library (metric, NEC 110.26 clearance zone auto-added for electrical gear).
+4. **Validate** (Doc 8 QA engine) and **Queue RFA** — QA-gated: no certificate,
+   no export.
+5. In Revit: **Mint plugin token** in the console (copies to clipboard) →
+   **Apex BIM Studio → Settings → Save token from clipboard** → **Generate →
+   Process Queue**. The plugin builds the family from AFIS, places/saves it,
+   and uploads the built `.rfa` back to the library, where anyone on the
+   project can download it.
 
 ---
 
