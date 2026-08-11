@@ -53,6 +53,8 @@ values ('workstation-01', encode(digest('apx_<random>', 'sha256'), 'hex'));
 | `POST /v1/extractions` | `{upload_id}` → Claude (Opus 5, structured output over the PDF) → `extractions` row |
 | `GET /v1/extractions/{id}` | Extraction status + result |
 | `POST /v1/extractions/{id}/approve` | Prediction → AFIS 1.0 (metric; NEC zone auto-added for electrical) → new `families` row |
+| `GET /v1/projects` | Projects visible to the caller (members see theirs; machine/demo callers see all) |
+| `POST /v1/projects` | `{name, client_name?}` → new project with the caller as admin member (signed-in users only) |
 | `GET /v1/jobs?kind=&status=` | Worker polling (default `status=queued`); machine callers also requeue jobs stuck `running` > 15 min |
 | `POST /v1/jobs/{id}/claim` | Atomic queued→running via `claim_job()` with attempt tracking (409 if already claimed; machine tokens only) |
 | `POST /v1/jobs/{id}/complete` | `{status: "succeeded"\|"failed", error?}` running→finished |
@@ -99,6 +101,6 @@ server-side, so several machines can drain the queue concurrently.
 
 - Real end-to-end extraction run (needs `ANTHROPIC_API_KEY` secret set by the
   project owner).
-- Sign-up/sign-in UI (the API accepts user JWTs; nothing issues them to real
-  users yet) and admin endpoints for managing projects/memberships — today
-  memberships are managed by SQL.
+- Membership management endpoints (invite/remove members, change roles) —
+  today the creator is the sole admin and further memberships are added by
+  SQL. Sign-up/sign-in and project creation are live in `../app.html`.

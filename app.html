@@ -71,10 +71,16 @@
 
   <div class="con-card">
     <h2>Connection</h2>
-    <p class="hint">Paste an <code>apx_…</code> service token (or the project publishable key). Stored only in this browser (localStorage).</p>
+    <p class="hint">Sign in with your Apex account — or paste an <code>apx_…</code> service token / the project publishable key. Credentials stay in this browser (localStorage).</p>
     <div class="con-row">
+      <input type="text" id="email" placeholder="email" autocomplete="username" />
+      <input type="password" id="password" placeholder="password" autocomplete="current-password" />
+      <button class="con-btn" id="btnSignin">Sign in</button>
+      <button class="con-btn ghost" id="btnSignup">Sign up</button>
+    </div>
+    <div class="con-row" style="margin-top:10px">
       <input type="text" id="apiUrl" placeholder="API base URL" />
-      <input type="password" id="apiToken" placeholder="apx_… token" />
+      <input type="password" id="apiToken" placeholder="apx_… token or user session token" />
       <button class="con-btn" id="btnConnect">Connect</button>
     </div>
     <div class="con-out" id="outConnect"></div>
@@ -84,6 +90,10 @@
     <h2><span class="step-num">1</span>Upload a submittal PDF</h2>
     <p class="hint">Max 30&nbsp;MB. The file lands in private storage; nothing is public.</p>
     <div class="con-row">
+      <select id="projSel" style="padding:9px 12px; border:1px solid #cfd5db; border-radius:8px;">
+        <option value="">(default project)</option>
+      </select>
+      <button class="con-btn ghost" id="btnNewProj" disabled>New project</button>
       <input type="file" id="pdfFile" accept="application/pdf" />
       <button class="con-btn" id="btnUpload" disabled>Upload</button>
     </div>
@@ -129,18 +139,29 @@
 <script>
 (() => {
   const DEFAULT_URL = "https://kdqisuzydkgzkzxlctpv.supabase.co/functions/v1/api";
+  // Publishable key: safe to embed (it's the public client key); used only as the
+  // apikey for the Supabase auth endpoints when signing in/up.
+  const PUBLISHABLE_KEY = "sb_publishable_n8xDG4wFR656MR419Vlgrg_6lMibnml";
   const $ = (id) => document.getElementById(id);
   const state = { uploadId: null, extractionId: null, extraction: null };
 
   const els = {
     url: $("apiUrl"), token: $("apiToken"),
+    email: $("email"), password: $("password"),
+    signin: $("btnSignin"), signup: $("btnSignup"),
     connect: $("btnConnect"), outConnect: $("outConnect"),
+    projSel: $("projSel"), newProj: $("btnNewProj"),
     file: $("pdfFile"), upload: $("btnUpload"), outUpload: $("outUpload"),
     extract: $("btnExtract"), extractStatus: $("extractStatus"),
     review: $("extractReview"), outExtract: $("outExtract"),
     approve: $("btnApprove"), outApprove: $("outApprove"),
     refresh: $("btnRefresh"), famList: $("famList"), outFam: $("outFam"),
   };
+
+  // The auth server lives on the same Supabase host as the API function.
+  function authBase() {
+    return els.url.value.replace(/\/functions\/v1\/.*$/, "") + "/auth/v1";
+  }
 
   els.url.value = localStorage.getItem("apex.apiUrl") || DEFAULT_URL;
   els.token.value = localStorage.getItem("apex.apiToken") || "";
@@ -172,8 +193,76 @@
   }
 
   function setConnected(on) {
-    [els.upload, els.refresh].forEach((b) => (b.disabled = !on));
+    [els.upload, els.refresh, els.newProj].forEach((b) => (b.disabled = !on));
   }
+
+  async function authPost(path, body) {
+    const resp = await fetch(authBase() + path, {
+      method: "POST",
+      headers: { "apikey": PUBLISHABLE_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      throw new Error(data.msg || data.error_description || data.message || ("auth error " + resp.status));
+    }
+    return data;
+  }
+
+  els.signin.addEventListener("click", async () => {
+    try {
+      const s = await authPost("/token?grant_type=password", {
+        email: els.email.value.trim(), password: els.password.value,
+      });
+      els.token.value = s.access_token;
+      show(els.outConnect, `Signed in as ${els.email.value.trim()} (session lasts about an hour).`);
+      els.connect.click();
+    } catch (e) {
+      show(els.outConnect, "Sign-in failed: " + e.message, true);
+    }
+  });
+
+  els.signup.addEventListener("click", async () => {
+    try {
+      const s = await authPost("/signup", {
+        email: els.email.value.trim(), password: els.password.value,
+      });
+      if (s.access_token) {
+        els.token.value = s.access_token;
+        show(els.outConnect, "Account created and signed in.");
+        els.connect.click();
+      } else {
+        show(els.outConnect, "Account created — confirm your email, then sign in.");
+      }
+    } catch (e) {
+      show(els.outConnect, "Sign-up failed: " + e.message, true);
+    }
+  });
+
+  async function loadProjects() {
+    try {
+      const data = await api("/v1/projects");
+      const cur = els.projSel.value;
+      els.projSel.innerHTML = '<option value="">(default project)</option>' +
+        data.projects.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+      if ([...els.projSel.options].some((o) => o.value === cur)) els.projSel.value = cur;
+    } catch {
+      // Project listing is a convenience; the console still works without it.
+    }
+  }
+
+  els.newProj.addEventListener("click", async () => {
+    const name = prompt("Project name:");
+    if (!name) return;
+    try {
+      const p = await api("/v1/projects", { method: "POST", body: JSON.stringify({ name }) });
+      show(els.outUpload, `Created project '${p.name}' (${p.id}); you are its admin.`);
+      await loadProjects();
+      els.projSel.value = p.id;
+    } catch (e) {
+      show(els.outUpload, e.message + (e.status === 403 ? " — sign in with a user account to create projects." : ""), true);
+    }
+  });
 
   els.connect.addEventListener("click", async () => {
     localStorage.setItem("apex.apiUrl", els.url.value);
@@ -183,6 +272,7 @@
       show(els.outConnect, `Connected — library has ${data.families.length} famil${data.families.length === 1 ? "y" : "ies"}.`);
       setConnected(true);
       renderFamilies(data.families);
+      loadProjects();
     } catch (e) {
       show(els.outConnect, e.message, true);
       setConnected(false);
@@ -198,7 +288,11 @@
       for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
       const row = await api("/v1/uploads", {
         method: "POST",
-        body: JSON.stringify({ filename: f.name, content_base64: btoa(bin) }),
+        body: JSON.stringify({
+          filename: f.name,
+          content_base64: btoa(bin),
+          ...(els.projSel.value ? { project_id: els.projSel.value } : {}),
+        }),
       });
       state.uploadId = row.id;
       els.extract.disabled = false;

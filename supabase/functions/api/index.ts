@@ -20,6 +20,8 @@
 //   POST /v1/extractions                    {"upload_id"} → Claude extraction → extractions row
 //   GET  /v1/extractions/:id                extraction status + result
 //   POST /v1/extractions/:id/approve        extraction → AFIS → families row (library)
+//   GET  /v1/projects                       projects visible to the caller
+//   POST /v1/projects                       {"name","client_name"?} → project (+ caller as admin member)
 //   GET  /v1/jobs?kind=&status=             list jobs (worker polling)
 //   POST /v1/jobs/:id/claim                 queued → running
 //   POST /v1/jobs/:id/complete              {"status":"succeeded"|"failed","error"?}
@@ -571,6 +573,57 @@ Deno.serve(async (req: Request) => {
       }).eq("id", exId);
       await audit(ctx, "family", fam.id, "extraction_approved", { extraction_id: exId, family_name: fam.family_name });
       return json({ family: fam, extraction_id: exId }, 201);
+    }
+    return fail(404, "NOT_FOUND", "Unknown action");
+  }
+
+  // ----- projects (self-service; memberships otherwise managed by admins) -----
+  if (resource === "projects") {
+    if (parts.length === 2 && req.method === "GET") {
+      let q = supabase.from("projects")
+        .select("id, name, client_name, status, created_at")
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(100);
+      const scope = projectScope(ctx);
+      if (scope !== null) {
+        if (scope.length === 0) return json({ projects: [] });
+        q = q.in("id", scope);
+      }
+      const { data, error } = await q;
+      if (error) return fail(500, "DB_ERROR", error.message);
+      return json({ projects: data });
+    }
+
+    if (parts.length === 2 && req.method === "POST") {
+      // Signed-in users only: a project needs a real owner to administer it.
+      if (ctx.kind !== "user")
+        return fail(403, "FORBIDDEN", "Creating a project requires a signed-in user session");
+      // deno-lint-ignore no-explicit-any
+      let body: any;
+      try {
+        body = await req.json();
+      } catch {
+        return fail(400, "BAD_JSON", 'Body must be JSON: {"name", "client_name"?}');
+      }
+      const name = typeof body?.name === "string" ? body.name.trim() : "";
+      if (!name) return fail(400, "MISSING_FIELDS", "name is required");
+
+      const { data: proj, error: projErr } = await supabase.from("projects").insert({
+        name,
+        client_name: typeof body?.client_name === "string" ? body.client_name : null,
+        status: "active",
+        created_by: ctx.userId,
+      }).select("id, name, client_name, status, created_at").single();
+      if (projErr) return fail(500, "DB_ERROR", projErr.message);
+
+      const { error: memErr } = await supabase.from("project_members").insert({
+        project_id: proj.id, user_id: ctx.userId, role: "admin",
+      });
+      if (memErr) return fail(500, "DB_ERROR", memErr.message);
+
+      await audit(ctx, "project", proj.id, "project_created", { name: proj.name });
+      return json(proj, 201);
     }
     return fail(404, "NOT_FOUND", "Unknown action");
   }
