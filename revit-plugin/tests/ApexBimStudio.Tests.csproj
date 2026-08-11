@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>ApexBimStudio.Tests</AssemblyName>
+    <RootNamespace>Apex.BimStudio.Tests</RootNamespace>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <!-- Tests exercise the non-Revit logic; Revit types resolve from the
+         reference-only API packages and are never instantiated. -->
+    <DefineConstants>$(DefineConstants);REVIT_2024_OR_GREATER</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../src/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="2025.*" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2025.*" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>

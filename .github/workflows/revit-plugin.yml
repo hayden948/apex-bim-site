@@ -17,6 +17,8 @@ jobs:
           dotnet-version: "8.0.x"
       - name: Build (net48 + net8.0-windows)
         run: dotnet build revit-plugin/src/ApexBimStudio.csproj -c Release
+      - name: Run logic tests
+        run: dotnet run -c Release --project revit-plugin/tests/ApexBimStudio.Tests.csproj
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
