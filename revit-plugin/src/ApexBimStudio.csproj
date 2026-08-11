@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>ApexBimStudio</AssemblyName>
+    <RootNamespace>Apex.BimStudio</RootNamespace>
+    <!--
+      net48         -> Revit 2022, 2023, 2024 (.NET Framework hosts)
+      net8.0-windows -> Revit 2025+ (.NET 8 host)
+      The previous single net8.0 target silently dropped support for Revit 2022-2024
+      while the About dialog still claimed it.
+    -->
+    <TargetFrameworks>net48;net8.0-windows</TargetFrameworks>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <PlatformTarget>x64</PlatformTarget>
+    <UseWPF>true</UseWPF>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <AppendTargetFrameworkToOutputPath>true</AppendTargetFrameworkToOutputPath>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <!-- Revit add-in: the Revit process provides the runtime; never publish self-contained. -->
+    <SelfContained>false</SelfContained>
+    <Version>0.2.0</Version>
+    <FileVersion>0.2.0.0</FileVersion>
+    <InformationalVersion>0.2.0</InformationalVersion>
+    <Company>Apex</Company>
+    <Product>Apex BIM Studio</Product>
+    <Description>Apex BIM Studio Revit plugin</Description>
+  </PropertyGroup>
+
+  <!-- Lowest Revit API per host runtime; the API is additive across releases. -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net48'">
+    <RevitApiVersion>2022.*</RevitApiVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0-windows'">
+    <RevitApiVersion>2025.*</RevitApiVersion>
+    <DefineConstants>$(DefineConstants);REVIT_2024_OR_GREATER</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Reference-only Revit API packages (not redistributed with the add-in). -->
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="$(RevitApiVersion)" />
+    <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="$(RevitApiVersion)" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <!-- Keep in sync with what Revit 2025 ships to avoid in-process version conflicts. -->
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+    <Reference Include="System.Net.Http" />
+    <!-- DPAPI (ProtectedData) lives in System.Security on .NET Framework. -->
+    <Reference Include="System.Security" />
+  </ItemGroup>
+
+</Project>
