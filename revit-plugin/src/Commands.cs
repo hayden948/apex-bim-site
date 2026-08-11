@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
@@ -123,8 +125,64 @@ public class PlaceFamilyCommand : IExternalCommand
 {
     public Result Execute(ExternalCommandData c, ref string m, ElementSet e)
     {
-        TaskDialog.Show("Apex", "Family placement is not available in this build yet.");
-        return Result.Cancelled;
+        try
+        {
+            UIDocument? uidoc = c.Application.ActiveUIDocument;
+            Document? doc = uidoc?.Document;
+            if (doc == null || doc.IsFamilyDocument)
+            {
+                TaskDialog.Show("Apex", "Open a project document to place a family.");
+                return Result.Cancelled;
+            }
+
+            // Prefer the family stamped with the active Apex id; otherwise fall back to
+            // the most recently loaded family symbol so the button is still useful.
+            var symbols = new FilteredElementCollector(doc)
+                .OfClass(typeof(FamilySymbol))
+                .Cast<FamilySymbol>()
+                .ToList();
+            if (symbols.Count == 0)
+            {
+                TaskDialog.Show("Apex", "No loadable family types found in this project. Load a family first.");
+                return Result.Cancelled;
+            }
+
+            FamilySymbol? symbol = null;
+            if (Session.ActiveFamilyId != null)
+            {
+                symbol = symbols.FirstOrDefault(s =>
+                    s.LookupParameter("Apex_AfisId")?.AsString() == Session.ActiveFamilyId);
+                if (symbol == null)
+                {
+                    TaskDialog.Show("Apex",
+                        "The active Apex family is not loaded in this project yet. " +
+                        "Placing the most recent family type instead.");
+                }
+            }
+            symbol ??= symbols[symbols.Count - 1];
+
+            if (!symbol.IsActive)
+            {
+                using var tx = new Transaction(doc, "Apex: Activate family type");
+                tx.Start();
+                symbol.Activate();
+                tx.Commit();
+            }
+
+            // Hands control to Revit's normal placement flow (its own transaction).
+            uidoc!.PromptForFamilyInstancePlacement(symbol);
+            return Result.Succeeded;
+        }
+        catch (Autodesk.Revit.Exceptions.OperationCanceledException)
+        {
+            return Result.Cancelled;
+        }
+        catch (Exception ex)
+        {
+            ApexLog.Error("Family placement failed.", ex);
+            m = ex.Message;
+            return Result.Failed;
+        }
     }
 }
 
@@ -152,10 +210,89 @@ public class RunQaCommand : IExternalCommand
 [Transaction(TransactionMode.Manual)]
 public class VerifyClearancesCommand : IExternalCommand
 {
+    private const string ClearanceSubcategory = "Apex_Clearance";
+
     public Result Execute(ExternalCommandData c, ref string m, ElementSet e)
     {
-        TaskDialog.Show("Apex", "Clearance clash-checking is not available in this build yet.");
-        return Result.Cancelled;
+        try
+        {
+            Document? doc = c.Application.ActiveUIDocument?.Document;
+            if (doc == null || doc.IsFamilyDocument)
+            {
+                TaskDialog.Show("Apex", "Open a project document to verify clearances.");
+                return Result.Cancelled;
+            }
+
+            var instances = new FilteredElementCollector(doc)
+                .OfClass(typeof(FamilyInstance))
+                .Cast<FamilyInstance>()
+                .ToList();
+
+            int zonesChecked = 0;
+            var clashes = new List<string>();
+            var opt = new Options { DetailLevel = ViewDetailLevel.Fine };
+
+            foreach (FamilyInstance inst in instances)
+            {
+                foreach (Autodesk.Revit.DB.Solid zone in ClearanceSolids(doc, inst, opt))
+                {
+                    zonesChecked++;
+                    var filter = new ElementIntersectsSolidFilter(zone);
+                    var hits = new FilteredElementCollector(doc)
+                        .WhereElementIsNotElementType()
+                        .WhereElementIsViewIndependent()
+                        .WherePasses(filter)
+                        .Where(el => el.Id != inst.Id)
+                        .ToList();
+                    foreach (Element hit in hits)
+                        clashes.Add($"{inst.Name} ({inst.Id}) clearance blocked by {hit.Name} ({hit.Id})");
+                }
+            }
+
+            if (zonesChecked == 0)
+            {
+                TaskDialog.Show("Apex Clearances",
+                    $"No '{ClearanceSubcategory}' zones found in placed families. " +
+                    "Generate families with clearance zones first (Doc 6).");
+                return Result.Cancelled;
+            }
+
+            string summary = clashes.Count == 0
+                ? $"Checked {zonesChecked} clearance zone(s): no obstructions found."
+                : $"Checked {zonesChecked} clearance zone(s): {clashes.Count} obstruction(s):\n\n"
+                  + string.Join("\n", clashes.Take(20))
+                  + (clashes.Count > 20 ? $"\n… and {clashes.Count - 20} more (see log)." : "");
+            foreach (string cl in clashes) ApexLog.Warn("Clearance clash: " + cl);
+            TaskDialog.Show("Apex Clearances (Doc 6)", summary);
+            return Result.Succeeded;
+        }
+        catch (Exception ex)
+        {
+            ApexLog.Error("Clearance verification failed.", ex);
+            m = ex.Message;
+            return Result.Failed;
+        }
+    }
+
+    /// <summary>Solids drawn on the Apex_Clearance subcategory within a placed instance.</summary>
+    private static IEnumerable<Autodesk.Revit.DB.Solid> ClearanceSolids(Document doc, FamilyInstance inst, Options opt)
+    {
+        GeometryElement? ge = inst.get_Geometry(opt);
+        if (ge == null) yield break;
+
+        foreach (GeometryObject go in ge)
+        {
+            if (go is not GeometryInstance gi) continue;
+            foreach (GeometryObject o in gi.GetInstanceGeometry())
+            {
+                if (o is not Autodesk.Revit.DB.Solid s || s.Volume < 1e-9) continue;
+                if (doc.GetElement(o.GraphicsStyleId) is GraphicsStyle gs
+                    && gs.GraphicsStyleCategory?.Name == ClearanceSubcategory)
+                {
+                    yield return s;
+                }
+            }
+        }
     }
 }
 

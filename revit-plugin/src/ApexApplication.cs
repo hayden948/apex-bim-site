@@ -52,20 +52,22 @@ public class ApexApplication : IExternalApplication
             AddButton(Panel(app, "M1"), asm, "ApexBuildFromJson", "Build from JSON", typeof(BuildFromPredJsonCommand),
                 "Build a family (.rfa) from a local .pred.json extraction");
 
+            RibbonPanel fam = Panel(app, "Families");
             if (ShowPrototypes)
-            {
-                RibbonPanel fam = Panel(app, "Families");
                 AddButton(fam, asm, "ApexLibrary", "Library", typeof(OpenLibraryCommand),
                     "Open the Apex family library");
-                AddButton(fam, asm, "ApexPlace", "Place", typeof(PlaceFamilyCommand),
-                    "Place the selected family");
+            AddButton(fam, asm, "ApexPlace", "Place", typeof(PlaceFamilyCommand),
+                "Place the selected family");
 
-                RibbonPanel validate = Panel(app, "Validate");
+            RibbonPanel validate = Panel(app, "Validate");
+            if (ShowPrototypes)
                 AddButton(validate, asm, "ApexQa", "Run QA", typeof(RunQaCommand),
                     "Run the Apex QA Engine on the active family (Doc 8)");
-                AddButton(validate, asm, "ApexClearance", "Verify Clearances", typeof(VerifyClearancesCommand),
-                    "Clash-check AFIS clearance zones");
+            AddButton(validate, asm, "ApexClearance", "Verify Clearances", typeof(VerifyClearancesCommand),
+                "Clash-check AFIS clearance zones");
 
+            if (ShowPrototypes)
+            {
                 RibbonPanel layout = Panel(app, "Layout & Survey");
                 AddButton(layout, asm, "ApexPoints", "Points", typeof(ManagePointsCommand),
                     "Manage survey/layout/anchor points");

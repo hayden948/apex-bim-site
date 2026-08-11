@@ -72,6 +72,15 @@ Priority-ordered fixes applied during reconstruction:
 5. **Honest ribbon** — buttons whose commands are stubs are hidden unless
    `APEX_SHOW_PROTOTYPES=1`; stub dialogs say the feature is not available yet
    instead of pretending success.
+6. **Three stubs became real features** —
+   - *Generate Schedule*: creates an "Apex Equipment Schedule" with `Apex_*`
+     shared-parameter columns and activates it;
+   - *Verify Clearances*: finds `Apex_Clearance` solids in placed family
+     instances and clash-checks them against the model
+     (`ElementIntersectsSolidFilter`), reporting obstructions;
+   - *Place*: activates and places the family stamped with the active Apex id
+     (falls back to the most recently loaded type) via Revit's native
+     placement flow.
 
 ## Release checklist (recommended)
 
