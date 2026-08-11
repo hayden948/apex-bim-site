@@ -39,14 +39,12 @@ public class ApexApplication : IExternalApplication
             AddButton(account, asm, "ApexSync", "Sync", typeof(SyncCommand),
                 "Sync the cloud AFIS library and choose the active family");
 
+            RibbonPanel gen = Panel(app, "Generate");
             if (ShowPrototypes)
-            {
-                RibbonPanel gen = Panel(app, "Generate");
                 AddButton(gen, asm, "ApexGenSubmittal", "From Submittal", typeof(GenerateFromSubmittalCommand),
                     "Generate a family from a PDF submittal");
-                AddButton(gen, asm, "ApexGenLibrary", "From Library", typeof(GenerateFromLibraryCommand),
-                    "Place a family from the Apex library");
-            }
+            AddButton(gen, asm, "ApexGenLibrary", "From Library", typeof(GenerateFromLibraryCommand),
+                "Build the active Apex library family and place it (project) or build into the open family (Family Editor)");
 
             AddButton(Panel(app, "M1"), asm, "ApexBuildFromJson", "Build from JSON", typeof(BuildFromPredJsonCommand),
                 "Build a family (.rfa) from a local .pred.json extraction");

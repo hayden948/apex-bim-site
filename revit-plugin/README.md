@@ -73,7 +73,13 @@ Priority-ordered fixes applied during reconstruction:
 5. **Honest ribbon** — buttons whose commands are stubs are hidden unless
    `APEX_SHOW_PROTOTYPES=1`; stub dialogs say the feature is not available yet
    instead of pretending success.
-6. **Three stubs became real features** —
+6. **The M2 loop is wired end-to-end** — Sync fetches the hosted Apex library
+   (`supabase/`) and sets the active family; From Library builds that family
+   from its AFIS document — into the open family (Family Editor) or built,
+   saved, loaded, and placed directly in a project; Run QA executes local
+   Doc 8 checks in the Family Editor (required parameters, geometry, flex
+   test in a rolled-back transaction) and the cloud QA Engine otherwise.
+7. **Three more stubs became real features** —
    - *Generate Schedule*: creates an "Apex Equipment Schedule" with `Apex_*`
      shared-parameter columns and activates it;
    - *Verify Clearances*: finds `Apex_Clearance` solids in placed family

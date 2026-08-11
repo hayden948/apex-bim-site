@@ -541,7 +541,7 @@ public class BuildFromPredJsonCommand : IExternalCommand
     /// 3. the default Electrical Equipment template in that folder.
     /// Returns null when nothing is found.
     /// </summary>
-    private static string? ResolveTemplate(Application app, string? familyTemplate)
+    internal static string? ResolveTemplate(Application app, string? familyTemplate)
     {
         if (!string.IsNullOrWhiteSpace(familyTemplate)
             && Path.IsPathRooted(familyTemplate)
@@ -583,7 +583,7 @@ public class BuildFromPredJsonCommand : IExternalCommand
         return null;
     }
 
-    private static string SafeFileName(string? preferred, string fallback)
+    internal static string SafeFileName(string? preferred, string fallback)
     {
         string name = string.IsNullOrWhiteSpace(preferred) ? fallback : preferred!;
         foreach (char c in Path.GetInvalidFileNameChars())

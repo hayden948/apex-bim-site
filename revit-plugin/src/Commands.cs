@@ -131,10 +131,11 @@ public class GenerateFromLibraryCommand : IExternalCommand
     {
         try
         {
-            Document? doc = c.Application.ActiveUIDocument?.Document;
-            if (doc == null || !doc.IsFamilyDocument)
+            UIDocument? uidoc = c.Application.ActiveUIDocument;
+            Document? doc = uidoc?.Document;
+            if (doc == null)
             {
-                TaskDialog.Show("Apex", "Open a family document (Family Editor) to build from AFIS.");
+                TaskDialog.Show("Apex", "Open a document first.");
                 return Result.Cancelled;
             }
 
@@ -146,9 +147,16 @@ public class GenerateFromLibraryCommand : IExternalCommand
                 return Result.Failed;
             }
 
-            AfisRevitMapper.Apply(doc, obj);
-            TaskDialog.Show("Apex", "Built '" + obj.Identity.Name + "' from AFIS into the family.");
-            return Result.Succeeded;
+            // Family Editor: build the AFIS object into the open family.
+            if (doc.IsFamilyDocument)
+            {
+                AfisRevitMapper.Apply(doc, obj);
+                TaskDialog.Show("Apex", "Built '" + obj.Identity.Name + "' from AFIS into the family.");
+                return Result.Succeeded;
+            }
+
+            // Project: build in a background family document, load, and place (M2 flow).
+            return BuildLoadAndPlace(c.Application.Application, uidoc!, doc, obj, ref m);
         }
         catch (Exception ex)
         {
@@ -156,6 +164,93 @@ public class GenerateFromLibraryCommand : IExternalCommand
             m = ex.Message;
             return Result.Failed;
         }
+    }
+
+    private static Result BuildLoadAndPlace(Autodesk.Revit.ApplicationServices.Application app,
+        UIDocument uidoc, Document project, AfisObject obj, ref string m)
+    {
+        string? templatePath = BuildFromPredJsonCommand.ResolveTemplate(app, obj.Identity.FamilyTemplate);
+        if (templatePath == null)
+        {
+            m = "No family template found for '" + (obj.Identity.FamilyTemplate ?? "default") + "'. " +
+                "Check Revit's Family Template File location.";
+            return Result.Failed;
+        }
+
+        string libDir = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Apex", "library");
+        System.IO.Directory.CreateDirectory(libDir);
+        string rfaPath = System.IO.Path.Combine(libDir,
+            BuildFromPredJsonCommand.SafeFileName(obj.Identity.Name, obj.Id) + ".rfa");
+
+        Document? famDoc = null;
+        try
+        {
+            famDoc = app.NewFamilyDocument(templatePath);
+            AfisRevitMapper.Apply(famDoc, obj);
+            famDoc.SaveAs(rfaPath, new SaveAsOptions { OverwriteExistingFile = true });
+        }
+        finally
+        {
+            try
+            {
+                famDoc?.Close(false);
+            }
+            catch
+            {
+                // Already closed; nothing to release.
+            }
+        }
+        ApexLog.Info("Built library family to " + rfaPath);
+
+        Family? family;
+        using (var tx = new Transaction(project, "Apex: Load library family"))
+        {
+            tx.Start();
+            if (!project.LoadFamily(rfaPath, out family) || family == null)
+            {
+                // Same name already loaded — find it and continue to placement.
+                family = new FilteredElementCollector(project)
+                    .OfClass(typeof(Family)).Cast<Family>()
+                    .FirstOrDefault(f => f.Name == System.IO.Path.GetFileNameWithoutExtension(rfaPath));
+            }
+            tx.Commit();
+        }
+        if (family == null)
+        {
+            m = "Family was generated (" + rfaPath + ") but could not be loaded into the project.";
+            return Result.Failed;
+        }
+
+        FamilySymbol? symbol = family.GetFamilySymbolIds()
+            .Select(sid => project.GetElement(sid))
+            .OfType<FamilySymbol>()
+            .FirstOrDefault();
+        if (symbol == null)
+        {
+            m = "Loaded family has no placeable types.";
+            return Result.Failed;
+        }
+
+        if (!symbol.IsActive)
+        {
+            using var tx = new Transaction(project, "Apex: Activate family type");
+            tx.Start();
+            symbol.Activate();
+            tx.Commit();
+        }
+
+        try
+        {
+            uidoc.PromptForFamilyInstancePlacement(symbol);
+        }
+        catch (Autodesk.Revit.Exceptions.OperationCanceledException)
+        {
+            // User placed zero-or-more instances then pressed Esc — normal exit.
+        }
+        TaskDialog.Show("Apex",
+            "Built and loaded '" + obj.Identity.Name + "' from the Apex library.\nSaved: " + rfaPath);
+        return Result.Succeeded;
     }
 }
 
