@@ -82,6 +82,7 @@
       <input type="text" id="apiUrl" placeholder="API base URL" />
       <input type="password" id="apiToken" placeholder="apx_… token or user session token" />
       <button class="con-btn" id="btnConnect">Connect</button>
+      <button class="con-btn ghost" id="btnMint" title="Create an apx_ service token for the Revit plugin (APEX_API_TOKEN)">Mint plugin token</button>
     </div>
     <div class="con-out" id="outConnect"></div>
   </div>
@@ -250,6 +251,25 @@
       // Project listing is a convenience; the console still works without it.
     }
   }
+
+  $("btnMint").addEventListener("click", async () => {
+    const name = prompt("Token name (e.g. the workstation it's for):", "revit-workstation");
+    if (!name) return;
+    try {
+      const t = await api("/v1/tokens", {
+        method: "POST",
+        body: JSON.stringify({ name, ...(els.projSel.value ? { project_id: els.projSel.value } : {}) }),
+      });
+      show(els.outConnect,
+        `Service token '${t.name}' minted (scoped to project ${t.project_id}).\n\n` +
+        `${t.token}\n\n` +
+        `Copy it now — it is shown only once. On the Revit workstation set:\n` +
+        `APEX_API_TOKEN=${t.token}`);
+    } catch (e) {
+      show(els.outConnect,
+        e.message + (e.status === 403 ? " — sign in with a user account first." : ""), true);
+    }
+  });
 
   els.newProj.addEventListener("click", async () => {
     const name = prompt("Project name:");

@@ -22,6 +22,12 @@
 //   POST /v1/extractions/:id/approve        extraction → AFIS → families row (library)
 //   GET  /v1/projects                       projects visible to the caller
 //   POST /v1/projects                       {"name","client_name"?} → project (+ caller as admin member)
+//   GET  /v1/projects/:id/members           members of a project (members only)
+//   POST /v1/projects/:id/members           {"email","role"?} add member (admins only)
+//   DELETE /v1/projects/:id/members/:uid    remove member (admins only; last admin protected)
+//   GET  /v1/tokens                         service tokens the caller minted
+//   POST /v1/tokens                         {"name","project_id"?} → apx_ token (plaintext shown once)
+//   POST /v1/tokens/:id/revoke              revoke a token the caller minted
 //   GET  /v1/jobs?kind=&status=             list jobs (worker polling)
 //   POST /v1/jobs/:id/claim                 queued → running
 //   POST /v1/jobs/:id/complete              {"status":"succeeded"|"failed","error"?}
@@ -43,7 +49,7 @@ const DEMO_USER = "00000000-0000-4000-8000-000000000001";
 const CORS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, content-type",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
 };
 
 function json(body: unknown, status = 200): Response {
@@ -577,8 +583,140 @@ Deno.serve(async (req: Request) => {
     return fail(404, "NOT_FOUND", "Unknown action");
   }
 
+  // ----- tokens (signed-in users mint machine tokens for the Revit worker) -----
+  if (resource === "tokens") {
+    if (ctx.kind !== "user")
+      return fail(403, "FORBIDDEN", "Managing service tokens requires a signed-in user session");
+
+    if (parts.length === 2 && req.method === "GET") {
+      const { data, error } = await supabase.from("api_tokens")
+        .select("id, name, project_id, created_at, last_used_at, revoked_at")
+        .eq("created_by", ctx.userId)
+        .order("created_at", { ascending: false });
+      if (error) return fail(500, "DB_ERROR", error.message);
+      return json({ tokens: data });
+    }
+
+    if (parts.length === 2 && req.method === "POST") {
+      // deno-lint-ignore no-explicit-any
+      let body: any = {};
+      try {
+        body = await req.json();
+      } catch { /* name defaults below */ }
+      const name = typeof body?.name === "string" && body.name.trim() ? body.name.trim() : "revit-worker";
+      const projectId = typeof body?.project_id === "string" ? body.project_id : defaultProject(ctx);
+      if (!projectId) return fail(403, "NO_PROJECT", "Join or create a project before minting a token");
+      if (!inScope(ctx, projectId)) return fail(403, "FORBIDDEN", "You are not a member of that project");
+
+      const raw = new Uint8Array(24);
+      crypto.getRandomValues(raw);
+      const token = "apx_" + Array.from(raw).map((b) => b.toString(16).padStart(2, "0")).join("");
+      const { data: row, error } = await supabase.from("api_tokens").insert({
+        name,
+        token_hash: await sha256hex(token),
+        project_id: projectId,
+        created_by: ctx.userId,
+      }).select("id, name, project_id, created_at").single();
+      if (error) return fail(500, "DB_ERROR", error.message);
+      await audit(ctx, "api_token", row.id, "token_minted", { name, project_id: projectId });
+      // The plaintext exists only in this response; only the hash is stored.
+      return json({ ...row, token }, 201);
+    }
+
+    if (parts.length === 4 && parts[3] === "revoke" && req.method === "POST") {
+      const tokId = parts[2];
+      if (!UUID_RE.test(tokId)) return fail(400, "INVALID_TOKEN_ID", "Token id must be a UUID");
+      const { data, error } = await supabase.from("api_tokens")
+        .update({ revoked_at: new Date().toISOString() })
+        .eq("id", tokId).eq("created_by", ctx.userId).is("revoked_at", null)
+        .select("id, name, revoked_at").maybeSingle();
+      if (error) return fail(500, "DB_ERROR", error.message);
+      if (!data) return fail(404, "TOKEN_NOT_FOUND", "No active token of yours with that id");
+      await audit(ctx, "api_token", tokId, "token_revoked");
+      return json(data);
+    }
+    return fail(404, "NOT_FOUND", "Unknown action");
+  }
+
   // ----- projects (self-service; memberships otherwise managed by admins) -----
   if (resource === "projects") {
+    // /v1/projects/:id/members[...]
+    if (parts.length >= 4 && parts[3] === "members") {
+      const projId = parts[2];
+      if (!UUID_RE.test(projId)) return fail(400, "INVALID_PROJECT_ID", "Project id must be a UUID");
+      if (!inScope(ctx, projId)) return fail(404, "PROJECT_NOT_FOUND", `No project ${projId}`);
+
+      const isAdmin = async () => {
+        if (ctx.kind !== "user") return ctx.kind !== "anon"; // service tokens act as admin within their scope
+        const { data } = await supabase.from("project_members")
+          .select("role").eq("project_id", projId).eq("user_id", ctx.userId).maybeSingle();
+        return data?.role === "admin";
+      };
+
+      if (parts.length === 4 && req.method === "GET") {
+        const { data, error } = await supabase.from("project_members")
+          .select("user_id, role, added_at, users(email, full_name)")
+          .eq("project_id", projId)
+          .order("added_at", { ascending: true });
+        if (error) return fail(500, "DB_ERROR", error.message);
+        return json({
+          members: (data ?? []).map((m) => ({
+            user_id: m.user_id,
+            role: m.role,
+            added_at: m.added_at,
+            email: (m as { users?: { email?: string } }).users?.email,
+            full_name: (m as { users?: { full_name?: string } }).users?.full_name,
+          })),
+        });
+      }
+
+      if (parts.length === 4 && req.method === "POST") {
+        if (!(await isAdmin())) return fail(403, "FORBIDDEN", "Only project admins can add members");
+        // deno-lint-ignore no-explicit-any
+        let body: any;
+        try {
+          body = await req.json();
+        } catch {
+          return fail(400, "BAD_JSON", 'Body must be JSON: {"email", "role"?}');
+        }
+        const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
+        if (!email) return fail(400, "MISSING_FIELDS", "email is required");
+        const role = ["viewer", "editor", "admin"].includes(body?.role) ? body.role : "editor";
+
+        const { data: target } = await supabase.from("users")
+          .select("id, email").ilike("email", email).maybeSingle();
+        if (!target)
+          return fail(404, "USER_NOT_FOUND",
+            `No Apex user with email '${email}' — they need to sign in once first`);
+
+        const { error: memErr } = await supabase.from("project_members")
+          .upsert({ project_id: projId, user_id: target.id, role }, { onConflict: "project_id,user_id" });
+        if (memErr) return fail(500, "DB_ERROR", memErr.message);
+        await audit(ctx, "project", projId, "member_added", { email, role });
+        return json({ project_id: projId, user_id: target.id, email: target.email, role }, 201);
+      }
+
+      if (parts.length === 5 && req.method === "DELETE") {
+        if (!(await isAdmin())) return fail(403, "FORBIDDEN", "Only project admins can remove members");
+        const targetId = parts[4];
+        if (!UUID_RE.test(targetId)) return fail(400, "INVALID_USER_ID", "User id must be a UUID");
+
+        const { data: admins } = await supabase.from("project_members")
+          .select("user_id").eq("project_id", projId).eq("role", "admin");
+        if ((admins ?? []).length === 1 && admins![0].user_id === targetId)
+          return fail(409, "LAST_ADMIN", "Cannot remove the project's only admin");
+
+        const { data, error } = await supabase.from("project_members")
+          .delete().eq("project_id", projId).eq("user_id", targetId)
+          .select("user_id").maybeSingle();
+        if (error) return fail(500, "DB_ERROR", error.message);
+        if (!data) return fail(404, "MEMBER_NOT_FOUND", "That user is not a member of this project");
+        await audit(ctx, "project", projId, "member_removed", { user_id: targetId });
+        return json({ project_id: projId, user_id: targetId, removed: true });
+      }
+      return fail(404, "NOT_FOUND", "Unknown action");
+    }
+
     if (parts.length === 2 && req.method === "GET") {
       let q = supabase.from("projects")
         .select("id, name, client_name, status, created_at")

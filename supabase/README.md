@@ -32,11 +32,11 @@ talks to, and it hosts the upload → extraction → approve pipeline (Doc 3).
 
 ### Issuing a service token
 
-```sql
--- generate, then store only the hash; hand the plaintext to the plugin once
-insert into api_tokens (name, token_hash)
-values ('workstation-01', encode(digest('apx_<random>', 'sha256'), 'hex'));
-```
+Sign in on `../app.html` and click **Mint plugin token** (or
+`POST /v1/tokens {"name", "project_id"?}` with a user session). The plaintext
+`apx_...` value is returned exactly once; only its SHA-256 hash is stored, and
+the token is pinned to the chosen project. Manage with `GET /v1/tokens` and
+`POST /v1/tokens/{id}/revoke`.
 
 ## Endpoints (contract: docs/architecture/api-design.md; QA: Doc 8)
 
@@ -55,6 +55,12 @@ values ('workstation-01', encode(digest('apx_<random>', 'sha256'), 'hex'));
 | `POST /v1/extractions/{id}/approve` | Prediction → AFIS 1.0 (metric; NEC zone auto-added for electrical) → new `families` row |
 | `GET /v1/projects` | Projects visible to the caller (members see theirs; machine/demo callers see all) |
 | `POST /v1/projects` | `{name, client_name?}` → new project with the caller as admin member (signed-in users only) |
+| `GET /v1/projects/{id}/members` | Members with roles (project members only) |
+| `POST /v1/projects/{id}/members` | `{email, role?}` add a member by email (project admins only; the user must have signed in once) |
+| `DELETE /v1/projects/{id}/members/{uid}` | Remove a member (admins only; the last admin is protected) |
+| `GET /v1/tokens` | Service tokens the caller minted (hashes never returned) |
+| `POST /v1/tokens` | `{name, project_id?}` → project-scoped `apx_` token, plaintext shown once (signed-in users only) |
+| `POST /v1/tokens/{id}/revoke` | Revoke a token the caller minted |
 | `GET /v1/jobs?kind=&status=` | Worker polling (default `status=queued`); machine callers also requeue jobs stuck `running` > 15 min |
 | `POST /v1/jobs/{id}/claim` | Atomic queued→running via `claim_job()` with attempt tracking (409 if already claimed; machine tokens only) |
 | `POST /v1/jobs/{id}/complete` | `{status: "succeeded"\|"failed", error?}` running→finished |
@@ -100,7 +106,5 @@ server-side, so several machines can drain the queue concurrently.
 ## Not yet implemented (next in line)
 
 - Real end-to-end extraction run (needs `ANTHROPIC_API_KEY` secret set by the
-  project owner).
-- Membership management endpoints (invite/remove members, change roles) —
-  today the creator is the sole admin and further memberships are added by
-  SQL. Sign-up/sign-in and project creation are live in `../app.html`.
+  project owner). Everything else — accounts, projects, memberships, tokens,
+  uploads, QA, jobs, RFA round-trip — is live and self-service.
