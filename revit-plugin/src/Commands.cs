@@ -195,8 +195,64 @@ public class GenerateScheduleCommand : IExternalCommand
 {
     public Result Execute(ExternalCommandData c, ref string m, ElementSet e)
     {
-        TaskDialog.Show("Apex", "Schedule generation is not available in this build yet.");
-        return Result.Cancelled;
+        try
+        {
+            UIDocument? uidoc = c.Application.ActiveUIDocument;
+            Document? doc = uidoc?.Document;
+            if (doc == null || doc.IsFamilyDocument)
+            {
+                TaskDialog.Show("Apex", "Open a project document to generate a schedule.");
+                return Result.Cancelled;
+            }
+
+            ViewSchedule schedule;
+            int fieldsAdded = 0;
+            using (var tx = new Transaction(doc, "Apex: Generate schedule"))
+            {
+                tx.Start();
+                var catId = new ElementId(BuiltInCategory.OST_ElectricalEquipment);
+                schedule = ViewSchedule.CreateSchedule(doc, catId);
+                try
+                {
+                    schedule.Name = "Apex Equipment Schedule";
+                }
+                catch (Autodesk.Revit.Exceptions.ArgumentException)
+                {
+                    // A schedule with that name already exists; keep the generated name.
+                }
+
+                foreach (SchedulableField sf in schedule.Definition.GetSchedulableFields())
+                {
+                    string name = sf.GetName(doc);
+                    // Apex shared parameters first-class; plus the standard identifying columns.
+                    bool wanted = name.StartsWith("Apex_", StringComparison.Ordinal)
+                        || name == "Family and Type" || name == "Mark" || name == "Count";
+                    if (!wanted) continue;
+                    try
+                    {
+                        schedule.Definition.AddField(sf);
+                        fieldsAdded++;
+                    }
+                    catch (Exception ex)
+                    {
+                        ApexLog.Warn($"Could not add schedule field '{name}': " + ex.Message);
+                    }
+                }
+                tx.Commit();
+            }
+
+            uidoc!.ActiveView = schedule;
+            TaskDialog.Show("Apex",
+                $"Created '{schedule.Name}' with {fieldsAdded} column(s). " +
+                "Apex_* shared parameters appear as columns once families using them are loaded.");
+            return Result.Succeeded;
+        }
+        catch (Exception ex)
+        {
+            ApexLog.Error("Schedule generation failed.", ex);
+            m = ex.Message;
+            return Result.Failed;
+        }
     }
 }
 

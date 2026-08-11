@@ -71,10 +71,10 @@ public class ApexApplication : IExternalApplication
                     "Manage survey/layout/anchor points");
                 AddButton(layout, asm, "ApexExport", "Export Layout", typeof(ExportLayoutCommand),
                     "Export field points (Trimble/CSV/DXF)");
-
-                AddButton(Panel(app, "Schedules"), asm, "ApexSchedule", "Generate", typeof(GenerateScheduleCommand),
-                    "Generate a schedule from Apex shared parameters");
             }
+
+            AddButton(Panel(app, "Schedules"), asm, "ApexSchedule", "Generate", typeof(GenerateScheduleCommand),
+                "Generate a schedule from Apex shared parameters");
 
             AddButton(Panel(app, "Help"), asm, "ApexAbout", "About", typeof(AboutCommand),
                 "About Apex BIM Studio");
