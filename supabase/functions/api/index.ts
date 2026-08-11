@@ -34,10 +34,18 @@ const NEC_MIN_CLEARANCE_M = 0.9144; // NEC 110.26 working space, 36 in
 const DEMO_PROJECT = "00000000-0000-4000-8000-000000000002";
 const DEMO_USER = "00000000-0000-4000-8000-000000000001";
 
+// Browser clients (the app.html pipeline console) need CORS; tokens are sent via
+// the Authorization header, never cookies, so a wildcard origin is safe here.
+const CORS: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, content-type",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+};
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body, null, 2), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...CORS },
   });
 }
 
@@ -308,6 +316,8 @@ function predToAfis(familyId: string, pred: any): unknown {
 // ---------- Router ----------
 
 Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+
   const denied = await authorize(req);
   if (denied) return denied;
 
@@ -585,7 +595,7 @@ Deno.serve(async (req: Request) => {
       lines.push([p.id ?? "", p.type ?? "", p.point_code ?? "", x, y, z, csvEscape(p.description ?? "")].join(","));
     }
     return new Response(lines.join("\n") + "\n", {
-      headers: { "Content-Type": "text/csv; charset=utf-8" },
+      headers: { "Content-Type": "text/csv; charset=utf-8", ...CORS },
     });
   }
 
@@ -635,6 +645,7 @@ Deno.serve(async (req: Request) => {
       headers: {
         "Content-Type": "application/octet-stream",
         "Content-Disposition": `attachment; filename="${fam.rfa_storage_key.split("/").pop()}"`,
+        ...CORS,
       },
     });
   }

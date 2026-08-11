@@ -20,6 +20,7 @@ Production-ready static implementation of the **Revizto-style** APEX BIM Studio 
 | File                 | Purpose                                                                 |
 | -------------------- | ----------------------------------------------------------------------- |
 | `index.html`         | Homepage + the interactive product simulation (vanilla JS).             |
+| `app.html`           | **Pipeline console** — drives the hosted Apex API end-to-end: upload a submittal PDF → AI extraction review → approve into the library → QA validate → queue RFA → download the built family. Needs an `apx_` service token (see `supabase/README.md`). |
 | `product.html`       | AI Revit Family Generator — problem, 5-step workflow, feature rows, ROI, use cases. |
 | `survey.html`        | Survey & Field Layout — nested points, layout workflow, field-format strip, KPIs. |
 | `integrations.html`  | Integrations grid (Revit, ACC, BIM 360, Trimble, Navisworks, Procore, Bluebeam, ReCap, Leica/Topcon, API) grouped by category, Live / Coming-soon status. |
