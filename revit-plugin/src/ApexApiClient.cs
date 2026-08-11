@@ -38,6 +38,33 @@ public class JobList
     [JsonPropertyName("jobs")] public List<JobSummary> Jobs { get; set; } = new List<JobSummary>();
 }
 
+public class QaFinding
+{
+    [JsonPropertyName("rule")] public string Rule { get; set; } = "";
+    [JsonPropertyName("severity")] public string Severity { get; set; } = "";
+    [JsonPropertyName("category")] public string? Category { get; set; }
+    [JsonPropertyName("passed")] public bool Passed { get; set; }
+    [JsonPropertyName("message")] public string Message { get; set; } = "";
+    [JsonPropertyName("fix_hint")] public string? FixHint { get; set; }
+}
+
+public class QaSummary
+{
+    [JsonPropertyName("errors")] public int Errors { get; set; }
+    [JsonPropertyName("warnings")] public int Warnings { get; set; }
+    [JsonPropertyName("info")] public int Info { get; set; }
+}
+
+public class QaResult
+{
+    [JsonPropertyName("object_id")] public string ObjectId { get; set; } = "";
+    [JsonPropertyName("family_name")] public string? FamilyName { get; set; }
+    [JsonPropertyName("passed")] public bool Passed { get; set; }
+    [JsonPropertyName("score")] public double Score { get; set; }
+    [JsonPropertyName("summary")] public QaSummary Summary { get; set; } = new QaSummary();
+    [JsonPropertyName("findings")] public List<QaFinding> Findings { get; set; } = new List<QaFinding>();
+}
+
 /// <summary>Thrown when the Apex API returns a non-success status; carries the response body.</summary>
 public class ApexApiException : Exception
 {
@@ -126,6 +153,12 @@ public class ApexApiClient
     {
         using var req = new HttpRequestMessage(HttpMethod.Post, FamilyUrl(id, "/validate"));
         return await SendAsync(req, ct).ConfigureAwait(false);
+    }
+
+    public async Task<QaResult?> ValidateParsedAsync(string id, CancellationToken ct = default)
+    {
+        string body = await ValidateAsync(id, ct).ConfigureAwait(false);
+        return JsonSerializer.Deserialize<QaResult>(body, Json);
     }
 
     public async Task<string> ExportPointsAsync(string id, string format, CancellationToken ct = default)

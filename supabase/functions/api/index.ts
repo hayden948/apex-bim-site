@@ -141,6 +141,19 @@ function runQaPipeline(afis: any): Finding[] {
   const isElectrical = (afis.identity?.category ?? "").toLowerCase().includes("electrical") ||
     (afis.connectors ?? []).some((c: any) => c.system === "electrical");
   if (isElectrical) {
+    // E — electrical profile (Doc 8 stage E). Warnings, not gates: extraction-
+    // derived families legitimately start without connectors modeled.
+    add("E-1", "warning", "electrical", "$.parameters",
+      params.some((p) => /volt/i.test(p?.name ?? "")),
+      "Voltage parameter present",
+      "Electrical equipment should carry a voltage parameter (e.g. Apex_Voltage)",
+      true);
+    add("E-2", "warning", "electrical", "$.connectors",
+      (afis.connectors ?? []).some((c: any) => c.system === "electrical"),
+      "Electrical connector present",
+      "Add an electrical connector so the family can join power circuits", true);
+  }
+  if (isElectrical) {
     const necZone = zones.find((z) => ["service_access", "clearance_code", "electrical_nec"].includes(z.type));
     add("Z-1", "error", "spatial", "$.zones", !!necZone,
       necZone ? `NEC working-space zone present ('${necZone.id}')`

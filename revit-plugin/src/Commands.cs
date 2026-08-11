@@ -69,32 +69,7 @@ public class SyncCommand : IExternalCommand
                 return Result.Succeeded;
             }
 
-            // TaskDialog offers four command links; page beyond that when the library grows.
-            var dlg = new TaskDialog("Apex Sync")
-            {
-                MainInstruction = $"Synced {families.Count} famil{(families.Count == 1 ? "y" : "ies")} from the Apex library.",
-                MainContent = "Choose the family to make active (used by Place / QA / Export):",
-                CommonButtons = TaskDialogCommonButtons.Cancel,
-            };
-            int shown = Math.Min(families.Count, 4);
-            for (int i = 0; i < shown; i++)
-            {
-                FamilySummary f = families[i];
-                dlg.AddCommandLink(TaskDialogCommandLinkId.CommandLink1 + i,
-                    f.FamilyName, $"{f.Category ?? "?"} · {f.Status ?? "?"} · Revit {f.RevitVersion ?? "?"}");
-            }
-            if (families.Count > shown)
-                dlg.FooterText = $"{families.Count - shown} more not shown — the Library panel will list all.";
-
-            TaskDialogResult result = dlg.Show();
-            int pick = result switch
-            {
-                TaskDialogResult.CommandLink1 => 0,
-                TaskDialogResult.CommandLink2 => 1,
-                TaskDialogResult.CommandLink3 => 2,
-                TaskDialogResult.CommandLink4 => 3,
-                _ => -1,
-            };
+            int pick = PickFamily(families);
             if (pick < 0) return Result.Cancelled;
 
             Session.ActiveFamilyId = families[pick].Id;
@@ -110,6 +85,49 @@ public class SyncCommand : IExternalCommand
             ApexLog.Error("Library sync failed.", ex);
             m = ex.Message;
             return Result.Failed;
+        }
+    }
+
+    /// <summary>
+    /// TaskDialog offers four command links, so page in threes with the fourth
+    /// link reserved for "More…" whenever families remain. Returns -1 on cancel.
+    /// </summary>
+    private static int PickFamily(List<FamilySummary> families)
+    {
+        const int PageSize = 3;
+        for (int start = 0; ; start = (start + PageSize) % Math.Max(families.Count, 1))
+        {
+            var dlg = new TaskDialog("Apex Sync")
+            {
+                MainInstruction = $"Synced {families.Count} famil{(families.Count == 1 ? "y" : "ies")} from the Apex library.",
+                MainContent = "Choose the family to make active (used by Place / QA / Export):",
+                CommonButtons = TaskDialogCommonButtons.Cancel,
+            };
+            int shown = Math.Min(families.Count - start, PageSize);
+            for (int i = 0; i < shown; i++)
+            {
+                FamilySummary f = families[start + i];
+                dlg.AddCommandLink(TaskDialogCommandLinkId.CommandLink1 + i,
+                    f.FamilyName, $"{f.Category ?? "?"} · {f.Status ?? "?"} · Revit {f.RevitVersion ?? "?"}");
+            }
+            bool hasMore = families.Count > PageSize;
+            if (hasMore)
+                dlg.AddCommandLink(TaskDialogCommandLinkId.CommandLink4, "More…",
+                    $"Showing {start + 1}–{start + shown} of {families.Count}");
+
+            TaskDialogResult result = dlg.Show();
+            int link = result switch
+            {
+                TaskDialogResult.CommandLink1 => 0,
+                TaskDialogResult.CommandLink2 => 1,
+                TaskDialogResult.CommandLink3 => 2,
+                TaskDialogResult.CommandLink4 => 3,
+                _ => -1,
+            };
+            if (link < 0) return -1;
+            if (link == 3 && hasMore) continue; // next page
+            if (link < shown) return start + link;
+            return -1;
         }
     }
 }
@@ -345,9 +363,28 @@ public class RunQaCommand : IExternalCommand
 
             // Otherwise: cloud QA Engine against the active library family (Doc 8).
             string id = Session.RequireActiveFamilyId();
-            string result = ApexApiClient.RunSync(ct => Session.Api.ValidateAsync(id, ct));
-            TaskDialog.Show("Apex QA (Doc 8)", result);
-            return Result.Succeeded;
+            QaResult? qa = ApexApiClient.RunSync(ct => Session.Api.ValidateParsedAsync(id, ct));
+            if (qa == null)
+            {
+                m = "The QA Engine returned an unreadable response.";
+                return Result.Failed;
+            }
+
+            var lines = new List<string>();
+            foreach (QaFinding f in qa.Findings.Where(f => !f.Passed))
+            {
+                lines.Add($"{f.Rule} [{f.Severity.ToUpperInvariant()}]  {f.Message}");
+                if (!string.IsNullOrEmpty(f.FixHint))
+                    lines.Add($"        fix: {f.FixHint}");
+            }
+            string verdict = qa.Passed
+                ? $"PASSED — score {qa.Score:0.##}."
+                : $"FAILED — score {qa.Score:0.##}: {qa.Summary.Errors} error(s), " +
+                  $"{qa.Summary.Warnings} warning(s). Export is gated (Doc 8 §6).";
+            TaskDialog.Show($"Apex QA (Doc 8) — {qa.FamilyName ?? id}",
+                verdict + (lines.Count > 0 ? "\n\n" + string.Join("\n", lines)
+                    : "\n\nAll checks passed."));
+            return qa.Passed ? Result.Succeeded : Result.Failed;
         }
         catch (Exception ex)
         {

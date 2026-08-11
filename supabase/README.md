@@ -32,7 +32,7 @@ values ('workstation-01', encode(digest('apx_<random>', 'sha256'), 'hex'));
 |---|---|
 | `GET /v1/families` | List library families |
 | `GET /v1/families/{id}` | AFIS 1.0 document (metric) |
-| `POST /v1/families/{id}/validate` | QA Engine: staged S→P→G→Z→L rules, Doc 1 §5.8 finding shape, persisted to `family_validations` |
+| `POST /v1/families/{id}/validate` | QA Engine: staged S→P→G→E→Z→L rules, Doc 1 §5.8 finding shape, persisted to `family_validations` |
 | `POST /v1/families/{id}/exports` | Field points CSV (Doc 7) |
 | `POST /v1/families/{id}/generate-rfa` | QA-gated (no certificate, no export); enqueues a `jobs` row for the Revit worker |
 | `POST /v1/families/{id}/rfa` | Worker uploads the built `.rfa` (`{content_base64, revit_version?}` → `rfa` bucket, pointer on the family) |

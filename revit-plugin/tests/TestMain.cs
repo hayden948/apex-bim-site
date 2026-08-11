@@ -116,6 +116,15 @@ class TestMain
         var jnone = JsonSerializer.Deserialize<JobList>(@"{""jobs"":[]}", opts)!;
         AssertTrue(jnone.Jobs.Count == 0, "empty job list binds");
 
+        // QaResult binding (cloud validate payload)
+        string qaJson = @"{""object_id"":""44d3d55d-dd6c-4011-acee-e23e47a394c4"",""family_name"":""Panelboard"",""passed"":false,""score"":0.86,""summary"":{""errors"":1,""warnings"":2,""info"":0},""findings"":[{""rule"":""Z-1"",""severity"":""error"",""category"":""spatial"",""passed"":false,""message"":""missing NEC zone"",""fix_hint"":""Add electrical_nec zone""}]}";
+        var qa = JsonSerializer.Deserialize<QaResult>(qaJson, opts)!;
+        AssertTrue(qa.Passed == false, "qa passed binds");
+        AssertEq(qa.Score, 0.86, "qa score binds");
+        AssertTrue(qa.Summary.Errors == 1 && qa.Summary.Warnings == 2, "qa summary binds");
+        AssertTrue(qa.Findings.Count == 1 && qa.Findings[0].Rule == "Z-1", "qa finding rule binds");
+        AssertTrue(qa.Findings[0].FixHint == "Add electrical_nec zone", "qa fix_hint binds");
+
         Console.WriteLine(_failures == 0 ? "\nALL TESTS PASSED" : $"\n{_failures} FAILURES");
         return _failures == 0 ? 0 : 1;
     }
