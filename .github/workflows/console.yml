@@ -1,0 +1,24 @@
+name: Console browser tests
+
+on:
+  push:
+    paths: ["app.html", "tests/console/**"]
+  pull_request:
+    paths: ["app.html", "tests/console/**"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tests/console
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install
+      - name: Install Chromium
+        run: npx playwright-core install --with-deps chromium
+      - run: npm test
