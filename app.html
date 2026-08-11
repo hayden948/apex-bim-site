@@ -260,11 +260,17 @@
         method: "POST",
         body: JSON.stringify({ name, ...(els.projSel.value ? { project_id: els.projSel.value } : {}) }),
       });
+      let copied = false;
+      try {
+        await navigator.clipboard.writeText(t.token);
+        copied = true;
+      } catch { /* clipboard may be blocked; the token is still shown below */ }
       show(els.outConnect,
         `Service token '${t.name}' minted (scoped to project ${t.project_id}).\n\n` +
         `${t.token}\n\n` +
-        `Copy it now — it is shown only once. On the Revit workstation set:\n` +
-        `APEX_API_TOKEN=${t.token}`);
+        (copied ? "Copied to clipboard — in Revit: Apex BIM Studio → Settings → Save token from clipboard.\n"
+                : "Copy it now — it is shown only once.\n") +
+        `Or set APEX_API_TOKEN=${t.token}`);
     } catch (e) {
       show(els.outConnect,
         e.message + (e.status === 403 ? " — sign in with a user account first." : ""), true);

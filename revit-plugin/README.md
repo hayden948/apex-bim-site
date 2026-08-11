@@ -32,12 +32,21 @@ Copy the matching build output to
 `%APPDATA%\Autodesk\Revit\Addins\<version>\ApexBimStudio\` and
 `deploy/ApexBimStudio.addin` to `%APPDATA%\Autodesk\Revit\Addins\<version>\`.
 
-## Configuration (environment variables)
+## Configuration
+
+**Recommended (no env vars):** mint a token in the web console (`app.html` →
+sign in → *Mint plugin token*, which copies it to the clipboard), then in Revit
+use **Apex BIM Studio → Settings**: *Save token from clipboard* (DPAPI-encrypted)
+and *Set API URL from clipboard*. The URL lands in
+`%LOCALAPPDATA%\Apex\config.json` and wins over the env vars below; changes
+apply immediately, no Revit restart.
+
+Environment-variable fallbacks:
 
 | Variable | Purpose |
 |---|---|
 | `APEX_API_URL` | Apex API base URL. Must be `https://` (plain `http` allowed for localhost only). Default `http://localhost:4000`. The hosted API lives at `https://kdqisuzydkgzkzxlctpv.supabase.co/functions/v1/api` (see `../supabase/README.md`). |
-| `APEX_API_TOKEN` | Bearer token fallback when no OAuth token is stored. Use an `apx_...` service token issued for the Revit add-in (stored hashed in the API's `api_tokens` table), or the Supabase publishable key. |
+| `APEX_API_TOKEN` | Bearer token fallback when no stored token exists. Use an `apx_...` service token (mint in the console; stored hashed, project-scoped, revocable), or the Supabase publishable key. |
 | `APEX_AUTH_URL` / `APEX_TOKEN_URL` / `APEX_CLIENT_ID` | OAuth PKCE endpoints + public client id for Sign In. |
 | `APEX_SHOW_PROTOTYPES` | `1` shows the not-yet-implemented ribbon buttons (hidden by default). |
 
@@ -92,7 +101,12 @@ Priority-ordered fixes applied during reconstruction:
    running Revit, so the cloud API queues `generate_rfa` jobs and the new
    *Generate → Process Queue* button drains them: claim (atomic queued→running
    on the server, safe with several machines) → fetch the family's AFIS → build
-   → save to `%LOCALAPPDATA%\Apex\rfa\` → mark the job succeeded/failed.
+   → save to `%LOCALAPPDATA%\Apex\rfa\` → upload the .rfa back to the library →
+   mark the job succeeded/failed.
+9. **Settings command (v0.4)** — workstation setup without env vars: paste the
+   console-minted `apx_` token (DPAPI-encrypted store) and the API URL from the
+   clipboard; the running session picks both up immediately. Readable cloud-QA
+   results and Sync paging landed in the same release.
 
 ## Release checklist (recommended)
 

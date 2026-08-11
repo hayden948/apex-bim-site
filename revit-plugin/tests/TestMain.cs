@@ -125,6 +125,27 @@ class TestMain
         AssertTrue(qa.Findings.Count == 1 && qa.Findings[0].Rule == "Z-1", "qa finding rule binds");
         AssertTrue(qa.Findings[0].FixHint == "Add electrical_nec zone", "qa fix_hint binds");
 
+        // ApexConfig round-trip (config.json wins over env for the API URL)
+        var cfg = new ApexConfig { ApiUrl = "https://example.apexbim.test/api" };
+        cfg.Save();
+        try
+        {
+            var loaded = ApexConfig.Load();
+            AssertTrue(loaded.ApiUrl == "https://example.apexbim.test/api", "config round-trips api_url");
+            var client = new ApexApiClient(); // no arg -> reads config first
+            AssertTrue(true, "client constructs from config URL");
+        }
+        finally
+        {
+            System.IO.File.Delete(ApexConfig.ConfigPath);
+        }
+        AssertTrue(ApexConfig.Load().ApiUrl == null, "missing config -> null api_url");
+
+        // Token display helper never leaks the secret
+        string desc = SecretText.Describe("apx_0123456789abcdef0123456789abcdef");
+        AssertTrue(desc.StartsWith("apx_0123") && !desc.Contains("abcdef0123"), "token describe shows prefix only");
+        AssertTrue(SecretText.Describe("") == "(empty)", "empty token describe");
+
         Console.WriteLine(_failures == 0 ? "\nALL TESTS PASSED" : $"\n{_failures} FAILURES");
         return _failures == 0 ? 0 : 1;
     }

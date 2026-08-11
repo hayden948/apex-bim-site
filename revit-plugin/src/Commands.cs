@@ -9,7 +9,10 @@ namespace Apex.BimStudio.Commands;
 
 internal static class Session
 {
-    public static readonly ApexApiClient Api = new ApexApiClient();
+    public static ApexApiClient Api { get; private set; } = new ApexApiClient();
+
+    /// <summary>Rebuilds the client after Settings changes URL/token, mid-session.</summary>
+    public static void ReloadApi() => Api = new ApexApiClient();
 
     /// <summary>Set when a family is selected/synced from the Apex library. Never defaulted.</summary>
     public static string? ActiveFamilyId;

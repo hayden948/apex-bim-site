@@ -34,6 +34,8 @@ public class ApexApplication : IExternalApplication
             string asm = Assembly.GetExecutingAssembly().Location;
 
             RibbonPanel account = Panel(app, "Account");
+            AddButton(account, asm, "ApexSettings", "Settings", typeof(SettingsCommand),
+                "Set the Apex API URL and service token for this workstation");
             AddButton(account, asm, "ApexSignIn", "Sign In", typeof(SignInCommand),
                 "Sign in to Apex (OAuth PKCE)");
             AddButton(account, asm, "ApexSync", "Sync", typeof(SyncCommand),

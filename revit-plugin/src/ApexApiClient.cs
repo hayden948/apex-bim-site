@@ -101,7 +101,9 @@ public class ApexApiClient
 
     public ApexApiClient(string? baseUrl = null)
     {
+        // Explicit arg > workstation config (Settings command) > env var > dev default.
         string url = baseUrl
+            ?? ApexConfig.Load().ApiUrl
             ?? Environment.GetEnvironmentVariable("APEX_API_URL")
             ?? "http://localhost:4000";
         _baseUrl = ValidateBaseUrl(url);
