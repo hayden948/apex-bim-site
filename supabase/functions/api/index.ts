@@ -3,11 +3,13 @@
 // QA rules: Doc 8 + Doc 1 §5. Error envelope: { error: { code, message, details? } }.
 //
 // Auth (custom — verify_jwt disabled): Authorization: Bearer <token> where token is
-//   - an apx_... service token (hashed in public.api_tokens; api-design.md §service tokens), or
-//   - the project's legacy anon JWT (SUPABASE_ANON_KEY).
+//   - an apx_... service token (hashed in public.api_tokens; optionally project-scoped),
+//   - a Supabase Auth user JWT (scoped to the caller's project memberships), or
+//   - the project's publishable key (SUPABASE_ANON_KEY env, sb_publishable_...;
+//     demo, unrestricted).
 //
 // Routes (base = https://<ref>.supabase.co/functions/v1/api; /api/v1/* also accepted):
-//   GET  /v1/families                       list library families
+//   GET  /v1/families?limit=&cursor=        list library families (cursor-paginated)
 //   GET  /v1/families/:id                   AFIS document
 //   POST /v1/families/:id/validate          QA Engine: staged rule checks (Doc 8)
 //   POST /v1/families/:id/exports           field points export (Doc 7), {"format":"csv"}
@@ -62,27 +64,92 @@ async function sha256hex(s: string): Promise<string> {
   return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** Custom auth: apx_ service tokens (hashed in DB) or the legacy anon key. */
-async function authorize(req: Request): Promise<Response | null> {
+/**
+ * Auth context. Three caller classes (api-design.md):
+ *  - service: apx_ machine token (Revit worker); optionally pinned to one project.
+ *  - user:    Supabase Auth JWT; scoped to the caller's project memberships.
+ *  - anon:    the project publishable key; demo/back-compat, unrestricted like before.
+ */
+type AuthCtx =
+  | { kind: "service"; projectId: string | null }
+  | { kind: "user"; userId: string; projectIds: string[] }
+  | { kind: "anon" };
+
+/** Custom auth: apx_ service tokens (hashed in DB), Supabase user JWTs, or the anon key. */
+async function authorize(req: Request): Promise<{ ctx: AuthCtx } | { deny: Response }> {
   const header = req.headers.get("Authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-  if (!token) return fail(401, "UNAUTHENTICATED", "Missing Authorization: Bearer token");
+  if (!token) return { deny: fail(401, "UNAUTHENTICATED", "Missing Authorization: Bearer token") };
 
   if (token.startsWith("apx_")) {
     const hash = await sha256hex(token);
     const { data } = await supabase
       .from("api_tokens")
-      .select("id")
+      .select("id, project_id")
       .eq("token_hash", hash)
       .is("revoked_at", null)
       .maybeSingle();
-    if (!data) return fail(401, "INVALID_TOKEN", "Unknown or revoked service token");
+    if (!data) return { deny: fail(401, "INVALID_TOKEN", "Unknown or revoked service token") };
     await supabase.from("api_tokens").update({ last_used_at: new Date().toISOString() }).eq("id", data.id);
-    return null;
+    return { ctx: { kind: "service", projectId: data.project_id ?? null } };
   }
 
-  if (token === Deno.env.get("SUPABASE_ANON_KEY")) return null;
-  return fail(401, "INVALID_TOKEN", "Token is neither a service token (apx_...) nor the project key");
+  if (token === Deno.env.get("SUPABASE_ANON_KEY")) return { ctx: { kind: "anon" } };
+
+  // Supabase Auth JWT (signed-in user).
+  const { data: userData, error: userErr } = await supabase.auth.getUser(token);
+  if (userErr || !userData?.user) {
+    return { deny: fail(401, "INVALID_TOKEN", "Token is not a service token (apx_...), the project key, or a valid user session") };
+  }
+  const u = userData.user;
+  // App tables FK created_by/actor_id to public.users — keep a mirror row.
+  await supabase.from("users").upsert({
+    id: u.id,
+    email: u.email ?? `${u.id}@users.invalid`,
+    full_name: (u.user_metadata?.full_name as string | undefined) ?? u.email ?? "User",
+  }, { onConflict: "id" });
+  const { data: memberships } = await supabase
+    .from("project_members").select("project_id").eq("user_id", u.id);
+  return { ctx: { kind: "user", userId: u.id, projectIds: (memberships ?? []).map((m) => m.project_id) } };
+}
+
+/** Projects this caller may touch; null = unrestricted (anon/demo, unscoped service token). */
+function projectScope(ctx: AuthCtx): string[] | null {
+  if (ctx.kind === "user") return ctx.projectIds;
+  if (ctx.kind === "service") return ctx.projectId ? [ctx.projectId] : null;
+  return null;
+}
+
+function actorId(ctx: AuthCtx): string {
+  return ctx.kind === "user" ? ctx.userId : DEMO_USER;
+}
+
+/** Project new records land in when the request doesn't name one. */
+function defaultProject(ctx: AuthCtx): string | null {
+  if (ctx.kind === "user") return ctx.projectIds[0] ?? null;
+  if (ctx.kind === "service") return ctx.projectId ?? DEMO_PROJECT;
+  return DEMO_PROJECT;
+}
+
+function inScope(ctx: AuthCtx, projectId: string | null): boolean {
+  const scope = projectScope(ctx);
+  return scope === null || (projectId !== null && scope.includes(projectId));
+}
+
+/** Best-effort audit trail (Doc 1); an audit failure never fails the request. */
+async function audit(ctx: AuthCtx, entityType: string, entityId: string, event: string, value?: unknown) {
+  try {
+    await supabase.from("audit_log").insert({
+      entity_type: entityType,
+      entity_id: entityId,
+      field: event,
+      new_value: value ?? null,
+      actor_id: actorId(ctx),
+      reason: `api:${ctx.kind}`,
+    });
+  } catch (e) {
+    console.error("audit insert failed", e);
+  }
 }
 
 // ---------- QA Engine (Doc 8: staged S→P→G→E→Z→L; Doc 1 §5.8 finding shape) ----------
@@ -331,8 +398,9 @@ function predToAfis(familyId: string, pred: any): unknown {
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
 
-  const denied = await authorize(req);
-  if (denied) return denied;
+  const auth = await authorize(req);
+  if ("deny" in auth) return auth.deny;
+  const ctx = auth.ctx;
 
   const url = new URL(req.url);
   const parts = url.pathname.split("/").filter(Boolean);
@@ -361,6 +429,10 @@ Deno.serve(async (req: Request) => {
     if (bytes.length === 0) return fail(400, "EMPTY_FILE", "File is empty");
     if (bytes.length > 30 * 1024 * 1024) return fail(413, "FILE_TOO_LARGE", "Max 30 MB");
 
+    const projectId = typeof body?.project_id === "string" ? body.project_id : defaultProject(ctx);
+    if (!projectId) return fail(403, "NO_PROJECT", "You are not a member of any project; ask an admin to add you");
+    if (!inScope(ctx, projectId)) return fail(403, "FORBIDDEN", "You are not a member of that project");
+
     const hashHex = Array.from(
       new Uint8Array(await crypto.subtle.digest("SHA-256", bytes.buffer as ArrayBuffer)),
     ).map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -371,16 +443,29 @@ Deno.serve(async (req: Request) => {
     if (upErr) return fail(500, "STORAGE_ERROR", upErr.message);
 
     const { data: row, error: dbErr } = await supabase.from("uploads").insert({
-      project_id: DEMO_PROJECT,
+      project_id: projectId,
       filename: body.filename,
       storage_key: storageKey,
       size_bytes: bytes.length,
       hash_sha256: hashHex,
       mime_type: "application/pdf",
       status: "ready",
-      created_by: DEMO_USER,
+      created_by: actorId(ctx),
     }).select("id, filename, size_bytes, status").single();
-    if (dbErr) return fail(500, "DB_ERROR", dbErr.message);
+    if (dbErr) {
+      // Same bytes already in this project (uq_uploads_hash_project_active):
+      // idempotent upload — drop the duplicate object, return the existing record.
+      if (dbErr.code === "23505") {
+        await supabase.storage.from("uploads").remove([storageKey]);
+        const { data: existing } = await supabase.from("uploads")
+          .select("id, filename, size_bytes, status")
+          .eq("project_id", projectId).eq("hash_sha256", hashHex).is("deleted_at", null)
+          .maybeSingle();
+        if (existing) return json({ ...existing, deduplicated: true });
+      }
+      return fail(500, "DB_ERROR", dbErr.message);
+    }
+    await audit(ctx, "upload", row.id, "upload_created", { filename: row.filename, size_bytes: row.size_bytes });
     return json(row, 201);
   }
 
@@ -399,8 +484,9 @@ Deno.serve(async (req: Request) => {
       if (!uploadId || !UUID_RE.test(uploadId)) return fail(400, "INVALID_UPLOAD_ID", "upload_id must be a UUID");
 
       const { data: upload } = await supabase.from("uploads")
-        .select("id, storage_key").eq("id", uploadId).is("deleted_at", null).maybeSingle();
-      if (!upload) return fail(404, "UPLOAD_NOT_FOUND", `No upload ${uploadId}`);
+        .select("id, storage_key, project_id").eq("id", uploadId).is("deleted_at", null).maybeSingle();
+      if (!upload || !inScope(ctx, upload.project_id))
+        return fail(404, "UPLOAD_NOT_FOUND", `No upload ${uploadId}`);
 
       const { data: ins, error: insErr } = await supabase.from("extractions").insert({
         upload_id: uploadId, schema_version: "1.0.0", status: "processing",
@@ -446,8 +532,13 @@ Deno.serve(async (req: Request) => {
     const exId = parts[2];
     if (!exId || !UUID_RE.test(exId)) return fail(400, "INVALID_EXTRACTION_ID", "Extraction id must be a UUID");
     const { data: ex } = await supabase.from("extractions")
-      .select("id, status, category, claude_result, warnings, error_message").eq("id", exId).maybeSingle();
+      .select("id, status, category, claude_result, warnings, error_message, uploads(project_id)")
+      .eq("id", exId).maybeSingle();
     if (!ex) return fail(404, "EXTRACTION_NOT_FOUND", `No extraction ${exId}`);
+    const exProject = (ex as { uploads?: { project_id?: string } }).uploads?.project_id ?? null;
+    if (!inScope(ctx, exProject)) return fail(404, "EXTRACTION_NOT_FOUND", `No extraction ${exId}`);
+    // deno-lint-ignore no-explicit-any
+    delete (ex as any).uploads;
 
     // GET /v1/extractions/:id
     if (parts.length === 3 && req.method === "GET") return json(ex);
@@ -465,15 +556,20 @@ Deno.serve(async (req: Request) => {
       const { data: fam, error: famErr } = await supabase.from("families").insert({
         id: familyId,
         extraction_id: exId,
-        project_id: DEMO_PROJECT,
+        project_id: exProject ?? defaultProject(ctx) ?? DEMO_PROJECT,
         family_name: pred.family_name ?? "Extracted Family",
         category: pred.category ?? "Generic Model",
         status: "ready",
-        created_by: DEMO_USER,
+        created_by: actorId(ctx),
         afis,
       }).select("id, family_name, category, status").single();
       if (famErr) return fail(500, "DB_ERROR", famErr.message);
-      await supabase.from("extractions").update({ status: "approved", approved_at: new Date().toISOString() }).eq("id", exId);
+      await supabase.from("extractions").update({
+        status: "approved",
+        approved_at: new Date().toISOString(),
+        approved_by: actorId(ctx),
+      }).eq("id", exId);
+      await audit(ctx, "family", fam.id, "extraction_approved", { extraction_id: exId, family_name: fam.family_name });
       return json({ family: fam, extraction_id: exId }, 201);
     }
     return fail(404, "NOT_FOUND", "Unknown action");
@@ -482,11 +578,23 @@ Deno.serve(async (req: Request) => {
   // ----- jobs (Doc 3 Stage 11 worker queue) -----
   if (resource === "jobs") {
     if (parts.length === 2 && req.method === "GET") {
+      // Workers polling is the moment to rescue jobs whose worker died mid-run.
+      if (ctx.kind !== "user") {
+        const { data: requeued } = await supabase.rpc("requeue_stale_jobs");
+        if (requeued) console.log(`requeued ${requeued} stale running job(s)`);
+      }
       const status = url.searchParams.get("status") ?? "queued";
       const kind = url.searchParams.get("kind");
       let q = supabase.from("jobs").select("id, kind, entity_id, status, attempt, created_at")
         .eq("status", status).order("created_at", { ascending: true }).limit(20);
       if (kind) q = q.eq("kind", kind);
+      const scope = projectScope(ctx);
+      if (scope !== null) {
+        if (scope.length === 0) return json({ jobs: [] });
+        const { data: famIds } = await supabase.from("families")
+          .select("id").in("project_id", scope).limit(1000);
+        q = q.in("entity_id", (famIds ?? []).map((f) => f.id));
+      }
       const { data, error } = await q;
       if (error) return fail(500, "DB_ERROR", error.message);
       return json({ jobs: data });
@@ -494,14 +602,16 @@ Deno.serve(async (req: Request) => {
     const jobId = parts[2];
     if (!jobId || !UUID_RE.test(jobId)) return fail(400, "INVALID_JOB_ID", "Job id must be a UUID");
 
+    // claim/complete are worker verbs — machine tokens only.
+    if (ctx.kind === "user")
+      return fail(403, "FORBIDDEN", "Job claim/complete requires a service token (apx_...)");
+
     if (parts[3] === "claim" && req.method === "POST") {
-      const { data, error } = await supabase.from("jobs")
-        .update({ status: "running", started_at: new Date().toISOString() })
-        .eq("id", jobId).eq("status", "queued")
-        .select("id, kind, entity_id, status").maybeSingle();
+      const { data, error } = await supabase.rpc("claim_job", { jid: jobId });
       if (error) return fail(500, "DB_ERROR", error.message);
-      if (!data) return fail(409, "NOT_CLAIMABLE", "Job is not queued (already claimed or finished)");
-      return json(data);
+      const job = Array.isArray(data) ? data[0] : data;
+      if (!job) return fail(409, "NOT_CLAIMABLE", "Job is not queued (already claimed or finished)");
+      return json({ id: job.id, kind: job.kind, entity_id: job.entity_id, status: job.status, attempt: job.attempt });
     }
     if (parts[3] === "complete" && req.method === "POST") {
       // deno-lint-ignore no-explicit-any
@@ -520,6 +630,7 @@ Deno.serve(async (req: Request) => {
         .select("id, status").maybeSingle();
       if (error) return fail(500, "DB_ERROR", error.message);
       if (!data) return fail(409, "NOT_RUNNING", "Job is not in running state");
+      await audit(ctx, "job", jobId, "job_completed", { status });
       return json(data);
     }
     return fail(404, "NOT_FOUND", "Unknown action");
@@ -529,14 +640,38 @@ Deno.serve(async (req: Request) => {
   if (resource !== "families") return fail(404, "NOT_FOUND", "Unknown route");
 
   if (parts.length === 2 && req.method === "GET") {
-    const { data, error } = await supabase
+    // Cursor pagination (api-design.md): ?limit=&cursor=, cursor from the prior page.
+    const limit = Math.min(Math.max(parseInt(url.searchParams.get("limit") ?? "50", 10) || 50, 1), 100);
+    let q = supabase
       .from("families")
       .select("id, family_name, category, status, revit_version, updated_at")
       .is("deleted_at", null)
       .order("updated_at", { ascending: false })
-      .limit(100);
+      .order("id", { ascending: false })
+      .limit(limit);
+    const scope = projectScope(ctx);
+    if (scope !== null) {
+      if (scope.length === 0) return json({ families: [], next_cursor: null });
+      q = q.in("project_id", scope);
+    }
+    const cursor = url.searchParams.get("cursor");
+    if (cursor) {
+      let ts: string, cid: string;
+      try {
+        [ts, cid] = atob(cursor).split("|");
+        if (!ts || !UUID_RE.test(cid)) throw new Error("bad");
+      } catch {
+        return fail(400, "INVALID_CURSOR", "cursor is not valid; use next_cursor from the previous page");
+      }
+      q = q.or(`updated_at.lt.${ts},and(updated_at.eq.${ts},id.lt.${cid})`);
+    }
+    const { data, error } = await q;
     if (error) return fail(500, "DB_ERROR", error.message);
-    return json({ families: data });
+    const last = data.length === limit ? data[data.length - 1] : null;
+    return json({
+      families: data,
+      next_cursor: last ? btoa(`${last.updated_at}|${last.id}`) : null,
+    });
   }
 
   const id = parts[2];
@@ -545,12 +680,13 @@ Deno.serve(async (req: Request) => {
 
   const { data: fam, error: famErr } = await supabase
     .from("families")
-    .select("id, family_name, category, status, afis, rfa_storage_key, rfa_revit_version")
+    .select("id, family_name, category, status, afis, rfa_storage_key, rfa_revit_version, project_id")
     .eq("id", id)
     .is("deleted_at", null)
     .maybeSingle();
   if (famErr) return fail(500, "DB_ERROR", famErr.message);
-  if (!fam) return fail(404, "FAMILY_NOT_FOUND", `No family ${id}`);
+  // Out-of-scope reads 404 rather than 403: don't confirm the family exists.
+  if (!fam || !inScope(ctx, fam.project_id)) return fail(404, "FAMILY_NOT_FOUND", `No family ${id}`);
 
   if (!action && req.method === "GET") {
     if (!fam.afis) return fail(404, "NO_AFIS_DOCUMENT", `Family ${id} has no AFIS document yet`);
@@ -646,6 +782,7 @@ Deno.serve(async (req: Request) => {
       rfa_uploaded_at: new Date().toISOString(),
     }).eq("id", id);
     if (updErr) return fail(500, "DB_ERROR", updErr.message);
+    await audit(ctx, "family", id, "rfa_uploaded", { storage_key: storageKey, size_bytes: bytes.length });
     return json({ family_id: id, rfa_storage_key: storageKey, size_bytes: bytes.length }, 201);
   }
 
@@ -675,6 +812,7 @@ Deno.serve(async (req: Request) => {
       .select("id, kind, status, created_at")
       .single();
     if (jobErr) return fail(500, "DB_ERROR", jobErr.message);
+    await audit(ctx, "job", job.id, "rfa_generation_queued", { family_id: id });
     return json({ job_id: job.id, status: job.status, note: "RFA generation queued; run Process Queue in the Revit plugin to build it." }, 202);
   }
 

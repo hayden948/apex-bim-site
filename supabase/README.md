@@ -6,11 +6,23 @@ talks to, and it hosts the upload → extraction → approve pipeline (Doc 3).
 
 - Base URL: `https://kdqisuzydkgzkzxlctpv.supabase.co/functions/v1/api`
 - Auth (custom, `verify_jwt` disabled): `Authorization: Bearer <token>` where the
-  token is either
+  token is one of
   - an **`apx_...` service token** for the Revit add-in (api-design.md §service
     tokens) — stored SHA-256-hashed in `public.api_tokens`, revocable per token
-    (`revoked_at`), `last_used_at` tracked; or
-  - the project's publishable/anon key.
+    (`revoked_at`), `last_used_at` tracked, optionally pinned to one project
+    (`api_tokens.project_id`; null = all projects);
+  - a **Supabase Auth user JWT** (signed-in user) — scoped to the caller's
+    `project_members` memberships: lists are filtered per project, out-of-scope
+    reads 404, writes land in the caller's project with their identity, and job
+    claim/complete (worker verbs) are refused with 403; or
+  - the project's **publishable key** (`sb_publishable_...`) — demo/back-compat,
+    unrestricted. (The legacy `eyJ...` anon JWT is no longer accepted; this
+    project migrated to the new API-key format.)
+- Defense in depth: the schema's RLS policies (`private.is_project_member`)
+  enforce the same membership scoping for direct PostgREST access, verified
+  live — a user JWT sees only member-project rows, the bare anon key sees none.
+- Every mutating endpoint writes a best-effort `audit_log` row
+  (entity, event, actor, `api:<caller-kind>`).
 - Plugin config:
   - `APEX_API_URL=https://kdqisuzydkgzkzxlctpv.supabase.co/functions/v1/api`
   - `APEX_API_TOKEN=<apx_... service token>`
@@ -30,19 +42,19 @@ values ('workstation-01', encode(digest('apx_<random>', 'sha256'), 'hex'));
 
 | Route | Behavior |
 |---|---|
-| `GET /v1/families` | List library families |
+| `GET /v1/families?limit=&cursor=` | List library families (cursor-paginated; `next_cursor` in the response) |
 | `GET /v1/families/{id}` | AFIS 1.0 document (metric) |
 | `POST /v1/families/{id}/validate` | QA Engine: staged S→P→G→E→Z→L rules, Doc 1 §5.8 finding shape, persisted to `family_validations` |
 | `POST /v1/families/{id}/exports` | Field points CSV (Doc 7) |
 | `POST /v1/families/{id}/generate-rfa` | QA-gated (no certificate, no export); enqueues a `jobs` row for the Revit worker |
 | `POST /v1/families/{id}/rfa` | Worker uploads the built `.rfa` (`{content_base64, revit_version?}` → `rfa` bucket, pointer on the family) |
 | `GET /v1/families/{id}/rfa` | Download the built `.rfa` (binary; 404 `NO_RFA` until the worker delivers) |
-| `POST /v1/uploads` | `{filename, content_base64}` → `uploads` storage bucket + row (30 MB cap, SHA-256 recorded) |
+| `POST /v1/uploads` | `{filename, content_base64, project_id?}` → `uploads` storage bucket + row (30 MB cap, SHA-256 recorded; identical bytes in the same project dedupe to the existing record) |
 | `POST /v1/extractions` | `{upload_id}` → Claude (Opus 5, structured output over the PDF) → `extractions` row |
 | `GET /v1/extractions/{id}` | Extraction status + result |
 | `POST /v1/extractions/{id}/approve` | Prediction → AFIS 1.0 (metric; NEC zone auto-added for electrical) → new `families` row |
-| `GET /v1/jobs?kind=&status=` | Worker polling (default `status=queued`) |
-| `POST /v1/jobs/{id}/claim` | Atomic queued→running (409 if already claimed) |
+| `GET /v1/jobs?kind=&status=` | Worker polling (default `status=queued`); machine callers also requeue jobs stuck `running` > 15 min |
+| `POST /v1/jobs/{id}/claim` | Atomic queued→running via `claim_job()` with attempt tracking (409 if already claimed; machine tokens only) |
 | `POST /v1/jobs/{id}/complete` | `{status: "succeeded"\|"failed", error?}` running→finished |
 
 Errors use the structured envelope `{ "error": { "code", "message", "details?" } }`.
@@ -62,6 +74,14 @@ All endpoints were exercised end-to-end after deployment (via in-database
   re-claim 409 `NOT_CLAIMABLE`.
 - RFA round-trip: GET 404 `NO_RFA` before → POST 201 (stored in the `rfa`
   bucket) → GET 200 returning the exact uploaded bytes.
+- Per-user auth (real signed-in Supabase Auth user): with no memberships —
+  empty list, upload 403 `NO_PROJECT`, claim 403 `FORBIDDEN`, out-of-scope
+  family 404; as a demo-project member — sees exactly the member families,
+  reads AFIS, uploads land in their project under their identity, another
+  project's family stays 404; cursor pagination pages 1-at-a-time with no
+  overlap; duplicate upload dedupes to the existing record.
+- RLS direct (PostgREST, bypassing the API): user JWT → member rows only;
+  bare anon key → zero rows.
 
 Seed data: demo project/upload/extraction chain and one library family
 `Panelboard 208V 42ckt` (`a11ce000-0000-4000-8000-000000000001`) with a full
@@ -79,5 +99,6 @@ server-side, so several machines can drain the queue concurrently.
 
 - Real end-to-end extraction run (needs `ANTHROPIC_API_KEY` secret set by the
   project owner).
-- Per-user auth (Supabase JWT) with RLS-scoped projects; today the API runs
-  against the demo project.
+- Sign-up/sign-in UI (the API accepts user JWTs; nothing issues them to real
+  users yet) and admin endpoints for managing projects/memberships — today
+  memberships are managed by SQL.
