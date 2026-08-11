@@ -45,6 +45,8 @@ public class ApexApplication : IExternalApplication
                     "Generate a family from a PDF submittal");
             AddButton(gen, asm, "ApexGenLibrary", "From Library", typeof(GenerateFromLibraryCommand),
                 "Build the active Apex library family and place it (project) or build into the open family (Family Editor)");
+            AddButton(gen, asm, "ApexProcessQueue", "Process Queue", typeof(ProcessQueueCommand),
+                "Build queued RFA-generation jobs from the Apex cloud queue into .rfa files");
 
             AddButton(Panel(app, "M1"), asm, "ApexBuildFromJson", "Build from JSON", typeof(BuildFromPredJsonCommand),
                 "Build a family (.rfa) from a local .pred.json extraction");

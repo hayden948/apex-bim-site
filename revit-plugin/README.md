@@ -37,7 +37,7 @@ Copy the matching build output to
 | Variable | Purpose |
 |---|---|
 | `APEX_API_URL` | Apex API base URL. Must be `https://` (plain `http` allowed for localhost only). Default `http://localhost:4000`. The hosted API lives at `https://kdqisuzydkgzkzxlctpv.supabase.co/functions/v1/api` (see `../supabase/README.md`). |
-| `APEX_API_TOKEN` | Bearer token fallback when no OAuth token is stored (e.g. the Supabase publishable key for the hosted API). |
+| `APEX_API_TOKEN` | Bearer token fallback when no OAuth token is stored. Use an `apx_...` service token issued for the Revit add-in (stored hashed in the API's `api_tokens` table), or the Supabase publishable key. |
 | `APEX_AUTH_URL` / `APEX_TOKEN_URL` / `APEX_CLIENT_ID` | OAuth PKCE endpoints + public client id for Sign In. |
 | `APEX_SHOW_PROTOTYPES` | `1` shows the not-yet-implemented ribbon buttons (hidden by default). |
 
@@ -88,6 +88,11 @@ Priority-ordered fixes applied during reconstruction:
    - *Place*: activates and places the family stamped with the active Apex id
      (falls back to the most recently loaded type) via Revit's native
      placement flow.
+8. **Process Queue worker (v0.3)** — RFA files can only be produced inside a
+   running Revit, so the cloud API queues `generate_rfa` jobs and the new
+   *Generate → Process Queue* button drains them: claim (atomic queued→running
+   on the server, safe with several machines) → fetch the family's AFIS → build
+   → save to `%LOCALAPPDATA%\Apex\rfa\` → mark the job succeeded/failed.
 
 ## Release checklist (recommended)
 

@@ -24,6 +24,20 @@ public class FamilyList
     [JsonPropertyName("families")] public List<FamilySummary> Families { get; set; } = new List<FamilySummary>();
 }
 
+public class JobSummary
+{
+    [JsonPropertyName("id")] public string Id { get; set; } = "";
+    [JsonPropertyName("kind")] public string Kind { get; set; } = "";
+    [JsonPropertyName("entity_id")] public string? EntityId { get; set; }
+    [JsonPropertyName("status")] public string? Status { get; set; }
+    [JsonPropertyName("attempt")] public int Attempt { get; set; }
+}
+
+public class JobList
+{
+    [JsonPropertyName("jobs")] public List<JobSummary> Jobs { get; set; } = new List<JobSummary>();
+}
+
 /// <summary>Thrown when the Apex API returns a non-success status; carries the response body.</summary>
 public class ApexApiException : Exception
 {
@@ -124,6 +138,50 @@ public class ApexApiClient
                 "application/json"),
         };
         return await SendAsync(req, ct).ConfigureAwait(false);
+    }
+
+    // ----- jobs queue (Doc 3 Stage 11: the plugin is the generate_rfa worker) -----
+
+    private string JobUrl(string id, string suffix = "")
+        => _baseUrl + "/v1/jobs/" + Uri.EscapeDataString(id) + suffix;
+
+    public async Task<List<JobSummary>> ListJobsAsync(string kind, string status = "queued",
+        CancellationToken ct = default)
+    {
+        string url = _baseUrl + "/v1/jobs?kind=" + Uri.EscapeDataString(kind)
+            + "&status=" + Uri.EscapeDataString(status);
+        using var req = new HttpRequestMessage(HttpMethod.Get, url);
+        string body = await SendAsync(req, ct).ConfigureAwait(false);
+        JobList? list = JsonSerializer.Deserialize<JobList>(body, Json);
+        return list?.Jobs ?? new List<JobSummary>();
+    }
+
+    /// <summary>Claims a queued job; returns null when another worker got there first (409).</summary>
+    public async Task<JobSummary?> ClaimJobAsync(string id, CancellationToken ct = default)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Post, JobUrl(id, "/claim"));
+        try
+        {
+            string body = await SendAsync(req, ct).ConfigureAwait(false);
+            return JsonSerializer.Deserialize<JobSummary>(body, Json);
+        }
+        catch (ApexApiException ex) when (ex.StatusCode == 409)
+        {
+            return null;
+        }
+    }
+
+    public async Task CompleteJobAsync(string id, bool succeeded, string? error = null,
+        CancellationToken ct = default)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Post, JobUrl(id, "/complete"))
+        {
+            Content = new StringContent(
+                JsonSerializer.Serialize(new { status = succeeded ? "succeeded" : "failed", error }, Json),
+                Encoding.UTF8,
+                "application/json"),
+        };
+        await SendAsync(req, ct).ConfigureAwait(false);
     }
 
     private async Task<string> SendAsync(HttpRequestMessage req, CancellationToken ct)

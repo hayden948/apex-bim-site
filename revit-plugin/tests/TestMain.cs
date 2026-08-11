@@ -106,6 +106,16 @@ class TestMain
         AssertTrue(flist.Families[0].FamilyName == "Panelboard 208V 42ckt", "family_name binds in summary");
         AssertTrue(flist.Families[0].RevitVersion == "2025", "revit_version binds in summary");
 
+        // JobSummary/JobList binding (Process Queue worker payload)
+        string jobsJson = @"{""jobs"":[{""id"":""749cc9c8-2a1f-4231-88fc-06987fc85a9d"",""kind"":""generate_rfa"",""entity_id"":""44d3d55d-dd6c-4011-acee-e23e47a394c4"",""status"":""queued"",""attempt"":1,""created_at"":""2026-08-11T21:18:35Z""}]}";
+        var jlist = JsonSerializer.Deserialize<JobList>(jobsJson, opts)!;
+        AssertTrue(jlist.Jobs.Count == 1, "job list binds");
+        AssertTrue(jlist.Jobs[0].Kind == "generate_rfa", "job kind binds");
+        AssertTrue(jlist.Jobs[0].EntityId == "44d3d55d-dd6c-4011-acee-e23e47a394c4", "job entity_id binds");
+        AssertTrue(jlist.Jobs[0].Attempt == 1, "job attempt binds");
+        var jnone = JsonSerializer.Deserialize<JobList>(@"{""jobs"":[]}", opts)!;
+        AssertTrue(jnone.Jobs.Count == 0, "empty job list binds");
+
         Console.WriteLine(_failures == 0 ? "\nALL TESTS PASSED" : $"\n{_failures} FAILURES");
         return _failures == 0 ? 0 : 1;
     }
