@@ -60,6 +60,12 @@ await page.click("#btnNewProj");
 await waitText("#outUpload", "Field Ops Project");
 check((await page.inputValue("#projSel")) === "2bcc843d-7634-4cbc-8eed-4d317e2f286f", "created project auto-selected");
 
+// --- resume a pending review from the list ---
+await page.waitForSelector('#pendingList button[data-resume]');
+await page.click('#pendingList button[data-resume]');
+await page.waitForSelector("#extractReview table");
+check((await page.inputValue("#rvName")).includes("Panelboard"), "resume loads pending review");
+
 // --- pipeline: upload -> extract -> approve -> validate -> queue -> download ---
 const pdf = path.join(here, "fixture.pdf");
 fs.writeFileSync(pdf, "%PDF-1.4 fixture");

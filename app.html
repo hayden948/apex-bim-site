@@ -108,6 +108,7 @@
       <button class="con-btn" id="btnExtract" disabled>Extract</button>
       <span id="extractStatus" class="hint" style="margin:0"></span>
     </div>
+    <div id="pendingList"></div>
     <div id="extractReview"></div>
     <div class="con-out" id="outExtract"></div>
   </div>
@@ -299,6 +300,7 @@
       setConnected(true);
       renderFamilies(data.families);
       loadProjects();
+      loadPending();
     } catch (e) {
       show(els.outConnect, e.message, true);
       setConnected(false);
@@ -350,6 +352,38 @@
       show(els.outExtract, nice, true);
     } finally {
       els.extract.disabled = false;
+    }
+  });
+
+  async function loadPending() {
+    const box = $("pendingList");
+    try {
+      const data = await api("/v1/extractions?status=ready");
+      if (!data.extractions.length) { box.innerHTML = ""; return; }
+      box.innerHTML = `<p class="hint" style="margin-top:12px">Pending reviews:</p>` +
+        data.extractions.map((e) => `
+          <div class="con-row" style="margin-bottom:6px">
+            <span style="flex:1">${esc(e.family_name || "(unnamed)")} — ${esc(e.filename || "?")}
+              <span class="conf">${e.id.slice(0, 8)}…</span></span>
+            <button class="con-btn ghost" data-resume="${e.id}">Resume review</button>
+          </div>`).join("");
+    } catch {
+      box.innerHTML = ""; // listing is a convenience; extraction itself still works
+    }
+  }
+
+  $("pendingList").addEventListener("click", async (ev) => {
+    const btn = ev.target.closest("button[data-resume]");
+    if (!btn) return;
+    try {
+      const e = await api(`/v1/extractions/${btn.dataset.resume}`);
+      state.extractionId = e.id;
+      state.extraction = e.claude_result;
+      renderReview(e.claude_result);
+      els.approve.disabled = false;
+      show(els.outExtract, { id: e.id, status: e.status, resumed: true });
+    } catch (err) {
+      show(els.outExtract, err.message, true);
     }
   });
 

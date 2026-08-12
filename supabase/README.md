@@ -51,6 +51,7 @@ the token is pinned to the chosen project. Manage with `GET /v1/tokens` and
 | `GET /v1/families/{id}/rfa` | Download the built `.rfa` (binary; 404 `NO_RFA` until the worker delivers) |
 | `POST /v1/uploads` | `{filename, content_base64, project_id?}` → `uploads` storage bucket + row (30 MB cap, SHA-256 recorded; identical bytes in the same project dedupe to the existing record) |
 | `POST /v1/extractions` | `{upload_id}` → Claude (Opus 5, structured output over the PDF) → `extractions` row |
+| `GET /v1/extractions?status=` | List extractions (default `status=ready` — pending reviews, project-scoped) |
 | `GET /v1/extractions/{id}` | Extraction status + result |
 | `POST /v1/extractions/{id}/approve` | Prediction → AFIS 1.0 → new `families` row. Optional body `{result}` carries the reviewer's corrections (validated, persisted, audited). The AFIS is fully parametric: placed reference planes, Width/Depth dimensions labeled to family parameters, centering constraints, Height driving the extrusion, NEC zone auto-added for electrical |
 | `GET /v1/projects` | Projects visible to the caller (members see theirs; machine/demo callers see all) |

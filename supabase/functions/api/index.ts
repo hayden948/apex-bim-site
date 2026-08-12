@@ -18,6 +18,7 @@
 //   GET  /v1/families/:id/rfa               download the built .rfa (binary)
 //   POST /v1/uploads                        {"filename","content_base64"} → storage + uploads row
 //   POST /v1/extractions                    {"upload_id"} → Claude extraction → extractions row
+//   GET  /v1/extractions?status=            list extractions (default status=ready: pending reviews)
 //   GET  /v1/extractions/:id                extraction status + result
 //   POST /v1/extractions/:id/approve        extraction → AFIS → families row (library)
 //   GET  /v1/projects                       projects visible to the caller
@@ -511,6 +512,34 @@ Deno.serve(async (req: Request) => {
 
   // ----- extractions -----
   if (resource === "extractions") {
+    // GET /v1/extractions?status= — pending reviews by default, so a reload
+    // of the console can pick a review back up instead of orphaning it.
+    if (parts.length === 2 && req.method === "GET") {
+      const status = url.searchParams.get("status") ?? "ready";
+      let q = supabase.from("extractions")
+        .select("id, status, category, created_at, claude_result, uploads!inner(project_id, filename)")
+        .eq("status", status)
+        .order("created_at", { ascending: false })
+        .limit(50);
+      const scope = projectScope(ctx);
+      if (scope !== null) {
+        if (scope.length === 0) return json({ extractions: [] });
+        q = q.in("uploads.project_id", scope);
+      }
+      const { data, error } = await q;
+      if (error) return fail(500, "DB_ERROR", error.message);
+      return json({
+        extractions: (data ?? []).map((e) => ({
+          id: e.id,
+          status: e.status,
+          category: e.category,
+          created_at: e.created_at,
+          family_name: (e.claude_result as { family_name?: string } | null)?.family_name ?? null,
+          filename: (e as { uploads?: { filename?: string } }).uploads?.filename ?? null,
+        })),
+      });
+    }
+
     // POST /v1/extractions {upload_id}
     if (parts.length === 2 && req.method === "POST") {
       // deno-lint-ignore no-explicit-any
