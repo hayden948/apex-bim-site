@@ -65,7 +65,15 @@ http.createServer(async (req, res) => {
       geometry: { primitive: "box", width: { value: 20, unit: "in" }, depth: { value: 5.75, unit: "in" }, height: { value: 44, unit: "in" } },
       parameters: [{ name: "Apex_Voltage", spec_type: "Text", group: "Electrical", is_instance: false, value: "208Y/120V", confidence: 0.98 }],
       warnings: ["Depth read from side elevation"] } });
-  if (p.endsWith("/approve")) return j(res, 201, { family: fam, extraction_id: "73b8653b-0000-4000-8000-000000000000" });
+  if (p.endsWith("/approve")) {
+    // Corrections arrive as {result}; echo the corrected name back like the real API.
+    let corrected = null;
+    try { corrected = JSON.parse(body).result || null; } catch { /* empty body ok */ }
+    if (corrected && (typeof corrected.family_name !== "string" || !(corrected.geometry?.width?.value > 0)))
+      return j(res, 400, { error: { code: "INVALID_CORRECTION", message: "bad corrected result" } });
+    const famOut = { ...fam, family_name: corrected?.family_name ?? fam.family_name };
+    return j(res, 201, { family: famOut, extraction_id: "73b8653b-0000-4000-8000-000000000000" });
+  }
   if (p.endsWith("/validate")) return j(res, 200, { object_id: fam.id, family_name: fam.family_name, passed: true, score: 1, summary: { errors: 0, warnings: 0, info: 0 }, findings: [{ rule: "S-1", severity: "error", passed: true, message: "ok" }] });
   if (p.endsWith("/generate-rfa")) return j(res, 202, { job_id: "749cc9c8-0000-4000-8000-000000000000", status: "queued", note: "queued" });
   if (p.endsWith("/rfa") && req.method === "GET") {

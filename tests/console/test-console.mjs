@@ -72,9 +72,12 @@ await page.click("#btnExtract");
 await page.waitForSelector("#extractReview table");
 check((await page.$$eval("#extractReview tbody tr", (r) => r.length)) === 1, "extraction review table");
 
+// human-in-the-loop: correct the name and a dimension before approving
+await page.fill("#rvName", "Corrected Panelboard XL");
+await page.fill('[data-dim="width"]', "24");
 await page.click("#btnApprove");
-await waitText("#outApprove", "Filed");
-check(true, "approve");
+await waitText("#outApprove", "Corrected Panelboard XL");
+check(true, "approve carries corrections");
 
 await page.click('#famList button[data-act="validate"]');
 await waitText("#outFam", "PASSED");

@@ -353,6 +353,19 @@ async function runExtraction(pdfBase64: string): Promise<{ ok: true; result: unk
 const M_PER: Record<string, number> = { in: 0.0254, mm: 0.001, cm: 0.01, m: 1, ft: 0.3048 };
 const toMeters = (v: number, unit: string) => v * (M_PER[unit] ?? 0.0254);
 
+/** Shape check for a prediction about to become a family (raw or user-corrected). */
+// deno-lint-ignore no-explicit-any
+function predProblem(p: any): string | null {
+  if (typeof p?.family_name !== "string" || !p.family_name.trim()) return "family_name is required";
+  if (typeof p?.category !== "string" || !p.category.trim()) return "category is required";
+  for (const k of ["width", "depth", "height"]) {
+    const g = p?.geometry?.[k];
+    if (typeof g?.value !== "number" || !(g.value > 0) || !(g?.unit in M_PER))
+      return `geometry.${k} must be {value > 0, unit one of ${Object.keys(M_PER).join("/")}}`;
+  }
+  return null;
+}
+
 /** Convert an approved extraction (pred shape) into an AFIS 1.0 document. */
 // deno-lint-ignore no-explicit-any
 function predToAfis(familyId: string, pred: any): unknown {
@@ -379,7 +392,26 @@ function predToAfis(familyId: string, pred: any): unknown {
     geometry: {
       origin: [0, 0, 0],
       bbox: { min: [-w / 2, -d / 2, 0], max: [w / 2, d / 2, h] },
-      reference_planes: [], solids: [{ id: "s1", method: "extrusion" }], dimensions: [], constraints: [],
+      // Placed planes + labeled dimensions make the box genuinely parametric in
+      // Revit: faces lock to the planes, Width/Depth drive the plane pairs, and
+      // the equality constraints keep the box centered while it flexes.
+      reference_planes: [
+        { id: "rp-center-x", name: "Center X", axis: "x", offset: 0, is_origin: true },
+        { id: "rp-center-y", name: "Center Y", axis: "y", offset: 0, is_origin: true },
+        { id: "rp-left", name: "Left", axis: "x", offset: -w / 2 },
+        { id: "rp-right", name: "Right", axis: "x", offset: w / 2 },
+        { id: "rp-front", name: "Front", axis: "y", offset: -d / 2 },
+        { id: "rp-back", name: "Back", axis: "y", offset: d / 2 },
+      ],
+      solids: [{ id: "s1", method: "extrusion", depth_param: "Height" }],
+      dimensions: [
+        { id: "dim-width", references: ["rp-left", "rp-right"], label_param: "Width", value: w },
+        { id: "dim-depth", references: ["rp-front", "rp-back"], label_param: "Depth", value: d },
+      ],
+      constraints: [
+        { type: "equality", refs: ["rp-left", "rp-center-x", "rp-right"] },
+        { type: "equality", refs: ["rp-front", "rp-center-y", "rp-back"] },
+      ],
     },
     parameters: [
       { name: "Apex_AfisId", data_type: "Text", binding: "type", group: "PG_IDENTITY_DATA", value: familyId },
@@ -551,16 +583,33 @@ Deno.serve(async (req: Request) => {
     // GET /v1/extractions/:id
     if (parts.length === 3 && req.method === "GET") return json(ex);
 
-    // POST /v1/extractions/:id/approve
+    // POST /v1/extractions/:id/approve — optional body {result: {...}} carries
+    // the reviewer's corrections (Doc 3 human-in-the-loop) and replaces the
+    // model output before the AFIS conversion.
     if (parts[3] === "approve" && req.method === "POST") {
       if (ex.status !== "ready" && ex.status !== "approved")
         return fail(409, "NOT_READY", `Extraction is '${ex.status}'`);
       if (!ex.claude_result) return fail(409, "NO_RESULT", "Extraction has no result to approve");
 
-      const familyId = crypto.randomUUID();
-      const afis = predToAfis(familyId, ex.claude_result);
       // deno-lint-ignore no-explicit-any
-      const pred = ex.claude_result as any;
+      let pred = ex.claude_result as any;
+      let corrected = false;
+      try {
+        const body = await req.json();
+        if (body?.result && typeof body.result === "object") {
+          const problem = predProblem(body.result);
+          if (problem) return fail(400, "INVALID_CORRECTION", problem);
+          pred = body.result;
+          corrected = true;
+        }
+      } catch { /* empty body -> approve the stored result as-is */ }
+      if (corrected) {
+        await supabase.from("extractions").update({ claude_result: pred }).eq("id", exId);
+        await audit(ctx, "extraction", exId, "extraction_corrected");
+      }
+
+      const familyId = crypto.randomUUID();
+      const afis = predToAfis(familyId, pred);
       const { data: fam, error: famErr } = await supabase.from("families").insert({
         id: familyId,
         extraction_id: exId,

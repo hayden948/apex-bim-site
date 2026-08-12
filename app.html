@@ -353,18 +353,29 @@
     }
   });
 
+  const UNITS = ["in", "mm", "cm", "m", "ft"];
   function renderReview(r) {
     if (!r) { els.review.innerHTML = ""; return; }
-    const dims = ["width", "depth", "height"]
-      .map((k) => `${k} ${r.geometry[k].value} ${r.geometry[k].unit}`).join(" · ");
-    const rows = (r.parameters || []).map((p) => `
-      <tr><td>${esc(p.name)}</td><td>${esc(p.value)}${p.units ? " " + esc(p.units) : ""}</td>
+    const unitSel = (k, cur) => `<select data-dim-unit="${k}">` +
+      UNITS.map((u) => `<option${u === cur ? " selected" : ""}>${u}</option>`).join("") + "</select>";
+    const dims = ["width", "depth", "height"].map((k) =>
+      `<label style="margin-right:14px">${k}
+        <input data-dim="${k}" type="number" step="any" value="${r.geometry[k].value}"
+          style="width:80px;padding:4px 6px;border:1px solid #cfd5db;border-radius:6px">
+        ${unitSel(k, r.geometry[k].unit)}</label>`).join("");
+    const rows = (r.parameters || []).map((p, i) => `
+      <tr><td>${esc(p.name)}</td>
+      <td><input data-param="${i}" value="${esc(p.value)}"
+        style="width:110px;padding:4px 6px;border:1px solid #cfd5db;border-radius:6px">${p.units ? " " + esc(p.units) : ""}</td>
       <td>${esc(p.spec_type)}</td><td>${esc(p.group)}</td>
       <td class="conf">${p.confidence != null ? Math.round(p.confidence * 100) + "%" : "—"}</td></tr>`).join("");
     const warns = (r.warnings || []).map((w) => `<li>${esc(w)}</li>`).join("");
     els.review.innerHTML = `
-      <p style="margin:14px 0 4px"><strong>${esc(r.family_name)}</strong>
+      <p style="margin:14px 0 4px">
+        <input id="rvName" value="${esc(r.family_name)}"
+          style="font-weight:700;min-width:320px;padding:5px 8px;border:1px solid #cfd5db;border-radius:6px">
         <span class="pill ok">${esc(r.category)}</span></p>
+      <p class="hint">Correct anything the AI misread — your edits are what gets approved:</p>
       <p class="hint">${dims}</p>
       <table class="con-table"><thead><tr>
         <th>Parameter</th><th>Value</th><th>Type</th><th>Group</th><th>Conf.</th>
@@ -372,9 +383,30 @@
       ${warns ? `<p class="hint" style="margin-top:12px">Warnings:</p><ul class="hint">${warns}</ul>` : ""}`;
   }
 
+  /** The reviewed (possibly corrected) result assembled from the editable fields. */
+  function collectReview() {
+    const r = JSON.parse(JSON.stringify(state.extraction));
+    const name = $("rvName");
+    if (name && name.value.trim()) r.family_name = name.value.trim();
+    for (const k of ["width", "depth", "height"]) {
+      const v = els.review.querySelector(`[data-dim="${k}"]`);
+      const u = els.review.querySelector(`[data-dim-unit="${k}"]`);
+      if (v && !isNaN(parseFloat(v.value))) r.geometry[k].value = parseFloat(v.value);
+      if (u) r.geometry[k].unit = u.value;
+    }
+    els.review.querySelectorAll("[data-param]").forEach((inp) => {
+      const p = r.parameters[parseInt(inp.dataset.param, 10)];
+      if (p) p.value = inp.value;
+    });
+    return r;
+  }
+
   els.approve.addEventListener("click", async () => {
     try {
-      const res = await api(`/v1/extractions/${state.extractionId}/approve`, { method: "POST", body: "{}" });
+      const res = await api(`/v1/extractions/${state.extractionId}/approve`, {
+        method: "POST",
+        body: JSON.stringify({ result: collectReview() }),
+      });
       show(els.outApprove, `Filed '${res.family.family_name}' in the library — family id ${res.family.id}`);
       els.approve.disabled = true;
       els.refresh.click();

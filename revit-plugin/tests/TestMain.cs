@@ -141,6 +141,21 @@ class TestMain
         }
         AssertTrue(ApexConfig.Load().ApiUrl == null, "missing config -> null api_url");
 
+        // RefPlane axis/offset (parametric placement) + legacy fallback
+        string planesJson = @"{""afis_version"":""1.0.0"",""id"":""f"",""identity"":{""name"":""X"",""category"":""C""},
+          ""geometry"":{""bbox"":{""min"":[-0.25,-0.07,0],""max"":[0.25,0.07,1.1]},
+            ""reference_planes"":[
+              {""id"":""rp-left"",""name"":""Left"",""axis"":""x"",""offset"":-0.25},
+              {""id"":""rp-legacy"",""name"":""Old"",""is_origin"":true}],
+            ""solids"":[{""id"":""s1"",""method"":""extrusion"",""depth_param"":""Height""}],
+            ""dimensions"":[{""id"":""dim-w"",""references"":[""rp-left"",""rp-right""],""label_param"":""Width"",""value"":0.5}]}}";
+        var pdoc = JsonSerializer.Deserialize<AfisObject>(planesJson, opts)!;
+        AssertTrue(pdoc.Geometry!.ReferencePlanes[0].Axis == "x", "ref plane axis binds");
+        AssertEq(pdoc.Geometry.ReferencePlanes[0].Offset, -0.25, "ref plane offset binds");
+        AssertTrue(pdoc.Geometry.ReferencePlanes[1].Axis == null, "legacy plane has null axis");
+        AssertTrue(pdoc.Geometry.Solids[0].DepthParam == "Height", "solid depth_param binds");
+        AssertTrue(pdoc.Geometry.Dimensions[0].LabelParam == "Width", "dimension label_param binds");
+
         // Token display helper never leaks the secret
         string desc = SecretText.Describe("apx_0123456789abcdef0123456789abcdef");
         AssertTrue(desc.StartsWith("apx_0123") && !desc.Contains("abcdef0123"), "token describe shows prefix only");

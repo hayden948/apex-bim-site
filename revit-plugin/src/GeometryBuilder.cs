@@ -77,6 +77,21 @@ public class GeometryBuilder
         EnsureLengthParam(fm, "Height", h);
         EnsureLengthParam(fm, "Width", w);
         EnsureLengthParam(fm, "Depth", d);
+
+        // Drive the extrusion's top with the declared height parameter so Height
+        // flexes vertically (plan-view dimensions can only drive Width/Depth).
+        string heightParam = geom.Solids.FirstOrDefault()?.DepthParam ?? "Height";
+        try
+        {
+            FamilyParameter hp = fm.get_Parameter(heightParam);
+            Parameter end = solid.get_Parameter(BuiltInParameter.EXTRUSION_END_PARAM);
+            if (hp != null && end != null)
+                fm.AssociateElementParameterToFamilyParameter(end, hp);
+        }
+        catch (Exception ex)
+        {
+            ApexLog.Warn($"Could not associate extrusion height with '{heightParam}': " + ex.Message);
+        }
         return solid;
     }
 
@@ -263,24 +278,44 @@ public class GeometryBuilder
         }
     }
 
+    /// <summary>
+    /// The plane a face should lock to: same orientation AND coincident. Matching
+    /// on normal alone would lock e.g. the right face to the Left plane, gluing the
+    /// box to the wrong side and making Width flex move the whole solid.
+    /// </summary>
     private ReferencePlane? PlaneMatchingFace(PlanarFace face)
     {
         ReferencePlane? best = null;
-        double bestDot = 0.3;
+        double bestDist = 0.01; // must effectively lie on the plane (internal feet)
         foreach (ReferencePlane rp in _planes.Values)
         {
-            double dot = Math.Abs(rp.Normal.Normalize().DotProduct(face.FaceNormal.Normalize()));
-            if (dot > bestDot)
+            XYZ n = rp.Normal.Normalize();
+            if (Math.Abs(n.DotProduct(face.FaceNormal.Normalize())) < 0.7) continue;
+            double dist = Math.Abs(n.DotProduct(face.Origin - rp.BubbleEnd));
+            if (dist < bestDist)
             {
-                bestDot = dot;
+                bestDist = dist;
                 best = rp;
             }
         }
         return best;
     }
 
-    private static Line EqualityLineFor(ReferenceArray refs)
-        => Line.CreateBound(new XYZ(-1.0, 0.0, 0.0), new XYZ(1.0, 0.0, 0.0));
+    /// <summary>Dimension line for an equality constraint, running across the
+    /// planes (i.e. along the first plane's normal), not always along X.</summary>
+    private Line EqualityLineFor(ReferenceArray refs)
+    {
+        XYZ dir = XYZ.BasisX;
+        foreach (ReferencePlane rp in _planes.Values)
+        {
+            if (rp.GetReference()?.ElementId == refs.get_Item(0)?.ElementId)
+            {
+                dir = rp.Normal.Normalize();
+                break;
+            }
+        }
+        return Line.CreateBound(-dir, dir);
+    }
 
     private FamilyParameter? EnsureConnLengthParam(FamilyManager fm, string name, double meters)
     {
@@ -328,9 +363,16 @@ public class GeometryBuilder
             ?? new FilteredElementCollector(_doc).OfClass(typeof(View)).Cast<View>().First(v => !v.IsTemplate);
     }
 
-    private static XYZ ToXyz(RefPlane rp) => XYZ.Zero;
+    private static XYZ ToXyz(RefPlane rp) => NormalOf(rp) * M(rp.Offset);
 
-    private static XYZ NormalOf(RefPlane rp) => rp.IsOrigin ? XYZ.BasisX : XYZ.BasisY;
+    private static XYZ NormalOf(RefPlane rp) => rp.Axis switch
+    {
+        "x" => XYZ.BasisX,
+        "y" => XYZ.BasisY,
+        "z" => XYZ.BasisZ,
+        // Legacy documents without axis: keep the old origin-based guess.
+        _ => rp.IsOrigin ? XYZ.BasisX : XYZ.BasisY,
+    };
 
     private static string SafeName(string n)
         => string.IsNullOrWhiteSpace(n) ? Guid.NewGuid().ToString("N").Substring(0, 6) : n;

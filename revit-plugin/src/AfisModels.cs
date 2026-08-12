@@ -49,6 +49,13 @@ public class RefPlane
     [JsonPropertyName("id")] public string Id { get; set; } = "";
     [JsonPropertyName("name")] public string Name { get; set; } = "";
     [JsonPropertyName("is_origin")] public bool IsOrigin { get; set; }
+
+    /// <summary>Plane normal axis: "x", "y" or "z". Null on legacy documents,
+    /// where placement falls back to the old origin-based guess.</summary>
+    [JsonPropertyName("axis")] public string? Axis { get; set; }
+
+    /// <summary>Signed offset from the family origin along Axis, meters.</summary>
+    [JsonPropertyName("offset")] public double Offset { get; set; }
 }
 
 public class Solid
