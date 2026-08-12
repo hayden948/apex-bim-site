@@ -107,6 +107,14 @@ Priority-ordered fixes applied during reconstruction:
    console-minted `apx_` token (DPAPI-encrypted store) and the API URL from the
    clipboard; the running session picks both up immediately. Readable cloud-QA
    results and Sync paging landed in the same release.
+10. **Library-first From Library** — when a Process Queue worker has already
+    built and uploaded a family's `.rfa`, From Library downloads that exact
+    file instead of rebuilding locally (identical output on every machine);
+    it falls back to building from AFIS when no built file exists yet. AFIS
+    reference planes now carry `axis`/`offset` so extraction-derived families
+    are placed and constrained for real: faces lock to coincident planes,
+    labeled Width/Depth dimensions and the Height-driven extrusion flex, and
+    equality constraints keep the box centered.
 
 ## Release checklist (recommended)
 

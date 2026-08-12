@@ -190,39 +190,59 @@ public class GenerateFromLibraryCommand : IExternalCommand
     private static Result BuildLoadAndPlace(Autodesk.Revit.ApplicationServices.Application app,
         UIDocument uidoc, Document project, AfisObject obj, ref string m)
     {
-        string? templatePath = BuildFromPredJsonCommand.ResolveTemplate(app, obj.Identity.FamilyTemplate);
-        if (templatePath == null)
-        {
-            m = "No family template found for '" + (obj.Identity.FamilyTemplate ?? "default") + "'. " +
-                "Check Revit's Family Template File location.";
-            return Result.Failed;
-        }
-
         string libDir = System.IO.Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Apex", "library");
         System.IO.Directory.CreateDirectory(libDir);
         string rfaPath = System.IO.Path.Combine(libDir,
             BuildFromPredJsonCommand.SafeFileName(obj.Identity.Name, obj.Id) + ".rfa");
 
-        Document? famDoc = null;
+        // Prefer the library's already-built .rfa (uploaded by a Process Queue
+        // worker): identical output on every machine, no local build time.
+        byte[]? prebuilt = null;
         try
         {
-            famDoc = app.NewFamilyDocument(templatePath);
-            AfisRevitMapper.Apply(famDoc, obj);
-            famDoc.SaveAs(rfaPath, new SaveAsOptions { OverwriteExistingFile = true });
+            prebuilt = ApexApiClient.RunSync(ct => Session.Api.TryDownloadRfaAsync(obj.Id, ct), timeoutSeconds: 120);
         }
-        finally
+        catch (Exception ex)
         {
+            ApexLog.Warn("RFA download failed; building locally instead: " + ex.Message);
+        }
+
+        if (prebuilt != null)
+        {
+            System.IO.File.WriteAllBytes(rfaPath, prebuilt);
+            ApexLog.Info($"Downloaded library-built family ({prebuilt.Length:N0} bytes) to " + rfaPath);
+        }
+        else
+        {
+            string? templatePath = BuildFromPredJsonCommand.ResolveTemplate(app, obj.Identity.FamilyTemplate);
+            if (templatePath == null)
+            {
+                m = "No family template found for '" + (obj.Identity.FamilyTemplate ?? "default") + "'. " +
+                    "Check Revit's Family Template File location.";
+                return Result.Failed;
+            }
+
+            Document? famDoc = null;
             try
             {
-                famDoc?.Close(false);
+                famDoc = app.NewFamilyDocument(templatePath);
+                AfisRevitMapper.Apply(famDoc, obj);
+                famDoc.SaveAs(rfaPath, new SaveAsOptions { OverwriteExistingFile = true });
             }
-            catch
+            finally
             {
-                // Already closed; nothing to release.
+                try
+                {
+                    famDoc?.Close(false);
+                }
+                catch
+                {
+                    // Already closed; nothing to release.
+                }
             }
+            ApexLog.Info("Built library family to " + rfaPath);
         }
-        ApexLog.Info("Built library family to " + rfaPath);
 
         Family? family;
         using (var tx = new Transaction(project, "Apex: Load library family"))

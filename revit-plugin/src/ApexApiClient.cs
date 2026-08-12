@@ -175,6 +175,25 @@ public class ApexApiClient
         return await SendAsync(req, ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Downloads the library's built .rfa for a family, or null when none exists
+    /// yet (404 NO_RFA) — callers fall back to building locally from AFIS.
+    /// </summary>
+    public async Task<byte[]?> TryDownloadRfaAsync(string id, CancellationToken ct = default)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Get, FamilyUrl(id, "/rfa"));
+        Authorize(req);
+        HttpResponseMessage resp = await Http.SendAsync(req, ct).ConfigureAwait(false);
+        if (resp.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+        if (!resp.IsSuccessStatusCode)
+        {
+            string body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+            ApexLog.Warn($"GET {req.RequestUri} -> {(int)resp.StatusCode}: {body}");
+            throw new ApexApiException((int)resp.StatusCode, resp.ReasonPhrase ?? "", body);
+        }
+        return await resp.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+    }
+
     /// <summary>Uploads a built .rfa back to the library (worker round-trip).</summary>
     public async Task UploadRfaAsync(string id, byte[] rfaBytes, string? revitVersion,
         CancellationToken ct = default)
