@@ -58,7 +58,10 @@ check((await page.inputValue("#apiToken")) === "user-jwt-abc123", "session JWT d
 await page.waitForFunction(() => document.querySelectorAll("#projSel option").length >= 2);
 await page.click("#btnNewProj");
 await waitText("#outUpload", "Field Ops Project");
-check((await page.inputValue("#projSel")) === "2bcc843d-7634-4cbc-8eed-4d317e2f286f", "created project auto-selected");
+// The success message shows before loadProjects() finishes repopulating the
+// picker — wait on the picker state itself, not the message.
+await page.waitForFunction(() => document.querySelector("#projSel")?.value === "2bcc843d-7634-4cbc-8eed-4d317e2f286f");
+check(true, "created project auto-selected");
 
 // --- resume a pending review from the list ---
 await page.waitForSelector('#pendingList button[data-resume]');
@@ -75,7 +78,10 @@ await waitText("#outUpload", "Uploaded");
 check(true, "upload");
 
 await page.click("#btnExtract");
-await page.waitForSelector("#extractReview table");
+// The resume step already rendered a review table, so waiting on the selector
+// would race the extract's re-render; wait for the extract response instead
+// (it contains "result", the resume echo contains "resumed").
+await waitText("#outExtract", '"result"');
 check((await page.$$eval("#extractReview tbody tr", (r) => r.length)) === 1, "extraction review table");
 
 // human-in-the-loop: correct the name and a dimension before approving
