@@ -312,13 +312,19 @@ submittal PDF, extract the data needed to generate a parametric Revit family.
 - category: the Revit category (e.g. "Electrical Equipment", "Mechanical Equipment").
 - geometry: the overall bounding box of the unit as a box primitive, with the
   dimensions and units exactly as printed on the drawing.
-- parameters: engineering values worth carrying into the family (voltage, circuits,
-  MCA, MOCP, weight, manufacturer, model number...). Use spec_type Number/Integer
-  for numerics, Length for dimensions (with units), Text otherwise. Include a
+- parameters: one entry for EVERY engineering value printed on the sheet — do not
+  summarize or keep only the most important. A typical submittal yields 5-10:
+  manufacturer, catalog/model number, system voltage, main rating (A), branch
+  circuit count, short-circuit rating (kA), frequency (Hz), phases/wires, weight,
+  enclosure type, mounting. Ratings with units go in as spec_type Number/Integer
+  with the bare numeral in value and the unit in units (e.g. value "100",
+  units "A"); compound ratings like "208Y/120 VAC" stay Text. Include a
   confidence 0-1 per parameter.
 - warnings: anything ambiguous, missing, or assumed.
 
-Extract only what the document supports; do not invent values.`;
+Extract only what the document supports; do not invent values. Completeness of
+parameters matters: every rating on the sheet that an electrical engineer would
+put on a Revit schedule should be captured.`;
 
 async function runExtraction(pdfBase64: string): Promise<{ ok: true; result: unknown } | { ok: false; resp: Response }> {
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
