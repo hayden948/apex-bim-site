@@ -370,6 +370,7 @@ function predProblem(p: any): string | null {
     if (typeof g?.value !== "number" || !(g.value > 0) || !(g?.unit in M_PER))
       return `geometry.${k} must be {value > 0, unit one of ${Object.keys(M_PER).join("/")}}`;
   }
+  if (p.parameters != null && !Array.isArray(p.parameters)) return "parameters must be an array";
   return null;
 }
 
@@ -425,11 +426,14 @@ function predToAfis(familyId: string, pred: any): unknown {
       // Width/Depth/Height are carried by geometry (labeled dimensions drive
       // Length parameters in Revit); a duplicate extracted "Width: 20" would
       // overwrite the Length param with 20 internal feet. Drop them here.
+      // Entries without a usable name (possible in a hand-corrected result)
+      // are dropped too — the plugin could do nothing with them.
       // deno-lint-ignore no-explicit-any
-      ...(pred.parameters ?? []).filter((p: any) =>
-        !["width", "depth", "height"].includes((p?.name ?? "").trim().toLowerCase()),
+      ...(pred.parameters ?? []).filter((p: any) => {
+        const name = typeof p?.name === "string" ? p.name.trim().toLowerCase() : "";
+        return name !== "" && !["width", "depth", "height"].includes(name);
       // deno-lint-ignore no-explicit-any
-      ).map((p: any) => ({
+      }).map((p: any) => ({
         name: p.name,
         data_type: dataTypeMap[p.spec_type] ?? "Text",
         binding: p.is_instance ? "instance" : "type",
