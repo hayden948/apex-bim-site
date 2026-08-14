@@ -7,3 +7,7 @@ desktop.ini
 
 # image-slot runtime sidecar (only written by the design tool)
 .image-slots.state.json
+
+# console test dependencies (installed or symlinked locally; no trailing
+# slash so a symlinked node_modules is ignored too)
+tests/console/node_modules
