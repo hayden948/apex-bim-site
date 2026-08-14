@@ -26,9 +26,11 @@ talks to, and it hosts the upload → extraction → approve pipeline (Doc 3).
 - Plugin config:
   - `APEX_API_URL=https://kdqisuzydkgzkzxlctpv.supabase.co/functions/v1/api`
   - `APEX_API_TOKEN=<apx_... service token>`
-- Extraction config: `supabase secrets set ANTHROPIC_API_KEY=sk-ant-...` — until
-  it is set, `POST /v1/extractions` returns `503 EXTRACTION_NOT_CONFIGURED`
-  (everything else works without it).
+- Extraction config: the `ANTHROPIC_API_KEY` secret is set on the project and
+  real extraction is live (verified end-to-end against a Square D panelboard
+  submittal — 18/18 printed ratings captured). If the key is ever removed,
+  `POST /v1/extractions` returns `503 EXTRACTION_NOT_CONFIGURED` and everything
+  else keeps working.
 
 ### Issuing a service token
 
@@ -104,8 +106,18 @@ queued job, builds the family from its AFIS document, saves the `.rfa` under
 `%LOCALAPPDATA%\Apex\rfa\`, and completes the job. Claim/complete are atomic
 server-side, so several machines can drain the queue concurrently.
 
-## Not yet implemented (next in line)
+## Live end-to-end
 
-- Real end-to-end extraction run (needs `ANTHROPIC_API_KEY` secret set by the
-  project owner). Everything else — accounts, projects, memberships, tokens,
-  uploads, QA, jobs, RFA round-trip — is live and self-service.
+The full pipeline has been run for real: PDF upload → Claude Opus 5 structured
+extraction (18 parameters from a Square D NQ430L2C submittal) → reviewed +
+corrected in the console → approve → parametric AFIS family (passed QA at
+0.94) → `generate_rfa` job queued for the plugin worker. Accounts, projects,
+memberships, tokens, uploads, QA, jobs, and the RFA round-trip are all live
+and self-service.
+
+Operational notes:
+- Extracted `Width`/`Depth`/`Height` parameters are dropped at approve time —
+  geometry's labeled dimensions carry them; a same-named parameter would
+  overwrite the Revit Length param with raw internal feet (fixed in v19).
+- Supabase advisor WARN: leaked-password protection (HaveIBeenPwned check) is
+  disabled — enable it in Dashboard → Auth → Passwords when convenient.

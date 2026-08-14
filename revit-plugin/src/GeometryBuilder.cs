@@ -74,16 +74,18 @@ public class GeometryBuilder
         loops.Append(rect);
         Extrusion solid = _doc.FamilyCreate.NewExtrusion(true, loops, baseSketch, M(h));
 
-        EnsureLengthParam(fm, "Height", h);
+        // Drive the extrusion's top with the declared height parameter so Height
+        // flexes vertically (plan-view dimensions can only drive Width/Depth).
+        // Ensure the declared name, not a hard-coded "Height", so an AFIS with
+        // depth_param "Overall Height" still gets a driven extrusion.
+        string heightParam = geom.Solids.FirstOrDefault()?.DepthParam ?? "Height";
+        EnsureLengthParam(fm, heightParam, h);
         EnsureLengthParam(fm, "Width", w);
         EnsureLengthParam(fm, "Depth", d);
 
-        // Drive the extrusion's top with the declared height parameter so Height
-        // flexes vertically (plan-view dimensions can only drive Width/Depth).
-        string heightParam = geom.Solids.FirstOrDefault()?.DepthParam ?? "Height";
         try
         {
-            FamilyParameter hp = fm.get_Parameter(heightParam);
+            FamilyParameter? hp = fm.get_Parameter(heightParam);
             Parameter end = solid.get_Parameter(BuiltInParameter.EXTRUSION_END_PARAM);
             if (hp != null && end != null)
                 fm.AssociateElementParameterToFamilyParameter(end, hp);
@@ -130,7 +132,10 @@ public class GeometryBuilder
 
             if (!string.IsNullOrEmpty(dim.LabelParam))
             {
-                FamilyParameter fp = fm.get_Parameter(dim.LabelParam);
+                // Create the label parameter if the AFIS names one the template
+                // (or BuildPrimarySolid) didn't already provide.
+                FamilyParameter? fp = fm.get_Parameter(dim.LabelParam)
+                    ?? EnsureLengthParam(fm, dim.LabelParam!, dim.Value);
                 if (fp != null) d.FamilyLabel = fp;
             }
             else
@@ -242,17 +247,19 @@ public class GeometryBuilder
         return arr;
     }
 
-    private void EnsureLengthParam(FamilyManager fm, string name, double meters)
+    private FamilyParameter? EnsureLengthParam(FamilyManager fm, string name, double meters)
     {
-        FamilyParameter p = fm.get_Parameter(name)
-            ?? fm.AddParameter(name, GroupTypeId.Geometry, SpecTypeId.Length, false);
         try
         {
+            FamilyParameter p = fm.get_Parameter(name)
+                ?? fm.AddParameter(name, GroupTypeId.Geometry, SpecTypeId.Length, false);
             fm.Set(p, M(meters));
+            return p;
         }
         catch (Exception ex)
         {
             ApexLog.Warn($"Could not set parameter '{name}': " + ex.Message);
+            return fm.get_Parameter(name);
         }
     }
 
