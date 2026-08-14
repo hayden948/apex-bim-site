@@ -189,7 +189,12 @@
       : await resp.text();
     if (!resp.ok) {
       const err = payload && payload.error ? payload.error : { code: resp.status, message: String(payload).slice(0, 300) };
-      throw Object.assign(new Error(`${err.code}: ${err.message}`), { status: resp.status, api: err });
+      // User sessions expire after about an hour; say so instead of a bare 401.
+      const tok = els.token.value.trim();
+      const hint = resp.status === 401 && tok && !tok.startsWith("apx_") && !tok.startsWith("sb_")
+        ? " — your session likely expired; sign in again above."
+        : "";
+      throw Object.assign(new Error(`${err.code}: ${err.message}${hint}`), { status: resp.status, api: err });
     }
     return payload;
   }

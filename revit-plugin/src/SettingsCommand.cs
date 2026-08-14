@@ -48,7 +48,18 @@ public class SettingsCommand : IExternalCommand
                 case TaskDialogResult.CommandLink1:
                 {
                     string text = ClipboardText();
-                    if (!text.StartsWith("apx_", StringComparison.Ordinal) && !text.StartsWith("sb_", StringComparison.Ordinal))
+                    if (text.StartsWith("sb_secret_", StringComparison.Ordinal))
+                    {
+                        // The Supabase secret key grants full admin access to the
+                        // database — it must never be used (or stored) as a bearer token.
+                        TaskDialog.Show("Apex Settings",
+                            "That is the Supabase SECRET key — never use it as the plugin token.\n\n" +
+                            "Mint an apx_… token in the Apex web console instead, and consider " +
+                            "rotating the secret key since it was on the clipboard.");
+                        return Result.Cancelled;
+                    }
+                    if (!text.StartsWith("apx_", StringComparison.Ordinal) &&
+                        !text.StartsWith("sb_publishable_", StringComparison.Ordinal))
                     {
                         TaskDialog.Show("Apex Settings",
                             "The clipboard does not hold an Apex token (expected it to start with 'apx_').");

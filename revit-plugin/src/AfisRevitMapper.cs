@@ -65,10 +65,33 @@ public static class AfisRevitMapper
                 if (ext != null)
                     fp = fm.AddParameter(ext, MapGroup(p.Group), p.Binding == "instance");
             }
+            if (fp == null && !p.IsShared)
+            {
+                // Extraction-derived engineering values arrive as plain (non-shared)
+                // parameters that don't exist in the template; without this they
+                // would all be dropped silently.
+                try
+                {
+                    fp = fm.AddParameter(p.Name, MapGroup(p.Group), MapSpec(p.DataType), p.Binding == "instance");
+                }
+                catch (Exception ex)
+                {
+                    ApexLog.Warn($"Could not create AFIS parameter '{p.Name}': " + ex.Message);
+                }
+            }
             if (fp != null)
                 SetValue(fm, fp, p);
         }
     }
+
+    private static ForgeTypeId MapSpec(string dataType) => dataType switch
+    {
+        "Length" => SpecTypeId.Length,
+        "Number" => SpecTypeId.Number,
+        "Integer" => SpecTypeId.Int.Integer,
+        "YesNo" => SpecTypeId.Boolean.YesNo,
+        _ => SpecTypeId.String.Text,
+    };
 
     private static void SetValue(FamilyManager fm, FamilyParameter fp, Param p)
     {

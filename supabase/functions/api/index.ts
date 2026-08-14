@@ -422,8 +422,14 @@ function predToAfis(familyId: string, pred: any): unknown {
     },
     parameters: [
       { name: "Apex_AfisId", data_type: "Text", binding: "type", group: "PG_IDENTITY_DATA", value: familyId },
+      // Width/Depth/Height are carried by geometry (labeled dimensions drive
+      // Length parameters in Revit); a duplicate extracted "Width: 20" would
+      // overwrite the Length param with 20 internal feet. Drop them here.
       // deno-lint-ignore no-explicit-any
-      ...(pred.parameters ?? []).map((p: any) => ({
+      ...(pred.parameters ?? []).filter((p: any) =>
+        !["width", "depth", "height"].includes((p?.name ?? "").trim().toLowerCase()),
+      // deno-lint-ignore no-explicit-any
+      ).map((p: any) => ({
         name: p.name,
         data_type: dataTypeMap[p.spec_type] ?? "Text",
         binding: p.is_instance ? "instance" : "type",
