@@ -6,7 +6,7 @@
 //   - an apx_... service token (hashed in public.api_tokens; optionally project-scoped),
 //   - a Supabase Auth user JWT (scoped to the caller's project memberships), or
 //   - the project's publishable key (SUPABASE_ANON_KEY env, sb_publishable_...;
-//     demo, unrestricted).
+//     demo sandbox — scoped to the demo project).
 //
 // Routes (base = https://<ref>.supabase.co/functions/v1/api; /api/v1/* also accepted):
 //   GET  /v1/families?limit=&cursor=        list library families (cursor-paginated)
@@ -17,7 +17,7 @@
 //   POST /v1/families/:id/rfa               worker uploads the built .rfa {"content_base64","revit_version"?}
 //   GET  /v1/families/:id/rfa               download the built .rfa (binary)
 //   POST /v1/uploads                        {"filename","content_base64"} → storage + uploads row
-//   POST /v1/extractions                    {"upload_id"} → Claude extraction → extractions row
+//   POST /v1/extractions                    {"upload_id"} → 202 + background Claude extraction (poll the row; 20/h/caller)
 //   GET  /v1/extractions?status=            list extractions (default status=ready: pending reviews)
 //   GET  /v1/extractions/:id                extraction status + result
 //   POST /v1/extractions/:id/approve        extraction → AFIS → families row (library)
@@ -77,10 +77,11 @@ async function sha256hex(s: string): Promise<string> {
  * Auth context. Three caller classes (api-design.md):
  *  - service: apx_ machine token (Revit worker); optionally pinned to one project.
  *  - user:    Supabase Auth JWT; scoped to the caller's project memberships.
- *  - anon:    the project publishable key; demo/back-compat, unrestricted like before.
+ *  - anon:    the project publishable key; demo sandbox only (scoped to the
+ *    demo project — real work needs a user session or a service token).
  */
 type AuthCtx =
-  | { kind: "service"; projectId: string | null }
+  | { kind: "service"; projectId: string | null; tokenId: string }
   | { kind: "user"; userId: string; projectIds: string[] }
   | { kind: "anon" };
 
@@ -100,7 +101,7 @@ async function authorize(req: Request): Promise<{ ctx: AuthCtx } | { deny: Respo
       .maybeSingle();
     if (!data) return { deny: fail(401, "INVALID_TOKEN", "Unknown or revoked service token") };
     await supabase.from("api_tokens").update({ last_used_at: new Date().toISOString() }).eq("id", data.id);
-    return { ctx: { kind: "service", projectId: data.project_id ?? null } };
+    return { ctx: { kind: "service", projectId: data.project_id ?? null, tokenId: data.id } };
   }
 
   if (token === Deno.env.get("SUPABASE_ANON_KEY")) return { ctx: { kind: "anon" } };
@@ -122,11 +123,20 @@ async function authorize(req: Request): Promise<{ ctx: AuthCtx } | { deny: Respo
   return { ctx: { kind: "user", userId: u.id, projectIds: (memberships ?? []).map((m) => m.project_id) } };
 }
 
-/** Projects this caller may touch; null = unrestricted (anon/demo, unscoped service token). */
+/** Projects this caller may touch; null = unrestricted (unscoped service token). */
 function projectScope(ctx: AuthCtx): string[] | null {
   if (ctx.kind === "user") return ctx.projectIds;
   if (ctx.kind === "service") return ctx.projectId ? [ctx.projectId] : null;
-  return null;
+  // The publishable key ships in the console's page source — it is a demo
+  // sandbox, not an all-projects credential.
+  return [DEMO_PROJECT];
+}
+
+/** Stable per-caller key for rate limiting. */
+function rateKey(ctx: AuthCtx): string {
+  if (ctx.kind === "user") return `user:${ctx.userId}`;
+  if (ctx.kind === "service") return `service:${ctx.tokenId}`;
+  return "anon";
 }
 
 function actorId(ctx: AuthCtx): string {
@@ -326,15 +336,15 @@ Extract only what the document supports; do not invent values. Completeness of
 parameters matters: every rating on the sheet that an electrical engineer would
 put on a Revit schedule should be captured.`;
 
-async function runExtraction(pdfBase64: string): Promise<{ ok: true; result: unknown } | { ok: false; resp: Response }> {
+// Claude Opus 5 list pricing, USD per token.
+const OPUS_IN_PER_TOKEN = 5 / 1_000_000;
+const OPUS_OUT_PER_TOKEN = 25 / 1_000_000;
+
+async function runExtraction(pdfBase64: string): Promise<
+  { ok: true; result: unknown; costUsd: number | null } | { ok: false; message: string }
+> {
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!apiKey) {
-    return {
-      ok: false,
-      resp: fail(503, "EXTRACTION_NOT_CONFIGURED",
-        "ANTHROPIC_API_KEY is not set on this Supabase project. Set it with: supabase secrets set ANTHROPIC_API_KEY=sk-ant-..."),
-    };
-  }
+  if (!apiKey) return { ok: false, message: "ANTHROPIC_API_KEY is not set on this Supabase project" };
   const anthropic = new Anthropic({ apiKey });
   const response = await anthropic.messages.create({
     model: "claude-opus-5",
@@ -349,12 +359,60 @@ async function runExtraction(pdfBase64: string): Promise<{ ok: true; result: unk
     }],
   });
 
+  const usage = (response as { usage?: { input_tokens?: number; output_tokens?: number } }).usage;
+  const costUsd = usage
+    ? Math.round(((usage.input_tokens ?? 0) * OPUS_IN_PER_TOKEN + (usage.output_tokens ?? 0) * OPUS_OUT_PER_TOKEN) * 10000) / 10000
+    : null;
+
   if (response.stop_reason === "refusal") {
-    return { ok: false, resp: fail(422, "EXTRACTION_REFUSED", "The model declined to process this document") };
+    return { ok: false, message: "The model declined to process this document" };
   }
   const textBlock = response.content.find((b: { type: string }) => b.type === "text") as { text: string } | undefined;
-  if (!textBlock) return { ok: false, resp: fail(502, "EXTRACTION_EMPTY", "Model returned no text content") };
-  return { ok: true, result: JSON.parse(textBlock.text) };
+  if (!textBlock) return { ok: false, message: "Model returned no text content" };
+  return { ok: true, result: JSON.parse(textBlock.text), costUsd };
+}
+
+/**
+ * Background half of POST /v1/extractions: download the PDF, run the model,
+ * finalize the row. Runs via EdgeRuntime.waitUntil so the request can answer
+ * 202 immediately; every exit path lands the row in 'ready' or 'failed'.
+ */
+async function processExtraction(extractionId: string, storageKey: string): Promise<void> {
+  const started = Date.now();
+  try {
+    const { data: blob, error: dlErr } = await supabase.storage.from("uploads").download(storageKey);
+    if (dlErr || !blob) throw new Error(dlErr?.message ?? "storage download failed");
+    const buf = new Uint8Array(await blob.arrayBuffer());
+    let b64 = "";
+    for (let i = 0; i < buf.length; i += 0x8000) {
+      b64 += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+    }
+    b64 = btoa(b64);
+
+    const extraction = await runExtraction(b64);
+    if (!extraction.ok) {
+      await supabase.from("extractions").update({
+        status: "failed", error_message: extraction.message, duration_ms: Date.now() - started,
+      }).eq("id", extractionId);
+      return;
+    }
+    // deno-lint-ignore no-explicit-any
+    const result = extraction.result as any;
+    await supabase.from("extractions").update({
+      status: "ready",
+      category: result.category ?? null,
+      claude_result: result,
+      warnings: result.warnings ?? [],
+      duration_ms: Date.now() - started,
+      cost_usd: extraction.costUsd,
+    }).eq("id", extractionId);
+  } catch (e) {
+    await supabase.from("extractions").update({
+      status: "failed",
+      error_message: e instanceof Error ? e.message : String(e),
+      duration_ms: Date.now() - started,
+    }).eq("id", extractionId);
+  }
 }
 
 const M_PER: Record<string, number> = { in: 0.0254, mm: 0.001, cm: 0.01, m: 1, ft: 0.3048 };
@@ -556,7 +614,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // POST /v1/extractions {upload_id}
+    // POST /v1/extractions {upload_id} — 202 + background model call.
     if (parts.length === 2 && req.method === "POST") {
       // deno-lint-ignore no-explicit-any
       let body: any;
@@ -573,51 +631,39 @@ Deno.serve(async (req: Request) => {
       if (!upload || !inScope(ctx, upload.project_id))
         return fail(404, "UPLOAD_NOT_FOUND", `No upload ${uploadId}`);
 
+      // Fail fast (no row) while the request can still carry the error.
+      if (!Deno.env.get("ANTHROPIC_API_KEY")) {
+        return fail(503, "EXTRACTION_NOT_CONFIGURED",
+          "ANTHROPIC_API_KEY is not set on this Supabase project. Set it with: supabase secrets set ANTHROPIC_API_KEY=sk-ant-...");
+      }
+
+      // Each extraction is a paid model call; cap per caller before creating work.
+      const { data: allowed, error: rlErr } = await supabase.rpc("check_rate_limit", {
+        rl_key: `extract:${rateKey(ctx)}`, rl_limit: 20, rl_window_seconds: 3600,
+      });
+      if (rlErr) return fail(500, "DB_ERROR", rlErr.message);
+      if (!allowed) return fail(429, "RATE_LIMITED", "Extraction limit reached (20 per hour per caller); try again later");
+
       const { data: ins, error: insErr } = await supabase.from("extractions").insert({
         upload_id: uploadId, schema_version: "1.0.0", status: "processing",
       }).select("id").single();
       if (insErr) return fail(500, "DB_ERROR", insErr.message);
 
-      const started = Date.now();
-      const { data: blob, error: dlErr } = await supabase.storage.from("uploads").download(upload.storage_key);
-      if (dlErr || !blob) {
-        await supabase.from("extractions").update({ status: "failed", error_message: "storage download failed" }).eq("id", ins.id);
-        return fail(500, "STORAGE_ERROR", dlErr?.message ?? "download failed");
-      }
-      const buf = new Uint8Array(await blob.arrayBuffer());
-      let b64 = "";
-      for (let i = 0; i < buf.length; i += 0x8000) {
-        b64 += String.fromCharCode(...buf.subarray(i, i + 0x8000));
-      }
-      b64 = btoa(b64);
-
-      try {
-        const extraction = await runExtraction(b64);
-        if (!extraction.ok) {
-          await supabase.from("extractions").update({ status: "failed", error_message: "extraction not run" }).eq("id", ins.id);
-          return extraction.resp;
-        }
-        // deno-lint-ignore no-explicit-any
-        const result = extraction.result as any;
-        await supabase.from("extractions").update({
-          status: "ready",
-          category: result.category ?? null,
-          claude_result: result,
-          warnings: result.warnings ?? [],
-          duration_ms: Date.now() - started,
-        }).eq("id", ins.id);
-        return json({ id: ins.id, status: "ready", result }, 201);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        await supabase.from("extractions").update({ status: "failed", error_message: msg }).eq("id", ins.id);
-        return fail(502, "EXTRACTION_FAILED", msg);
-      }
+      // Answer 202 now; the model call happens in the background and the client
+      // polls GET /v1/extractions/:id until 'ready' (or resumes from the
+      // pending-review list — the row survives a closed tab).
+      const task = processExtraction(ins.id, upload.storage_key);
+      // deno-lint-ignore no-explicit-any
+      const runtime = (globalThis as any).EdgeRuntime;
+      if (runtime?.waitUntil) runtime.waitUntil(task);
+      else await task;
+      return json({ id: ins.id, status: "processing" }, 202);
     }
 
     const exId = parts[2];
     if (!exId || !UUID_RE.test(exId)) return fail(400, "INVALID_EXTRACTION_ID", "Extraction id must be a UUID");
     const { data: ex } = await supabase.from("extractions")
-      .select("id, status, category, claude_result, warnings, error_message, uploads(project_id)")
+      .select("id, status, category, claude_result, warnings, error_message, cost_usd, duration_ms, uploads(project_id)")
       .eq("id", exId).maybeSingle();
     if (!ex) return fail(404, "EXTRACTION_NOT_FOUND", `No extraction ${exId}`);
     const exProject = (ex as { uploads?: { project_id?: string } }).uploads?.project_id ?? null;

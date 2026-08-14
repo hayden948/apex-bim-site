@@ -15,9 +15,10 @@ talks to, and it hosts the upload → extraction → approve pipeline (Doc 3).
     `project_members` memberships: lists are filtered per project, out-of-scope
     reads 404, writes land in the caller's project with their identity, and job
     claim/complete (worker verbs) are refused with 403; or
-  - the project's **publishable key** (`sb_publishable_...`) — demo/back-compat,
-    unrestricted. (The legacy `eyJ...` anon JWT is no longer accepted; this
-    project migrated to the new API-key format.)
+  - the project's **publishable key** (`sb_publishable_...`) — demo sandbox,
+    scoped to the demo project only (it ships in the console's page source, so
+    it is not an all-projects credential). (The legacy `eyJ...` anon JWT is no
+    longer accepted; this project migrated to the new API-key format.)
 - Defense in depth: the schema's RLS policies (`private.is_project_member`)
   enforce the same membership scoping for direct PostgREST access, verified
   live — a user JWT sees only member-project rows, the bare anon key sees none.
@@ -52,9 +53,9 @@ the token is pinned to the chosen project. Manage with `GET /v1/tokens` and
 | `POST /v1/families/{id}/rfa` | Worker uploads the built `.rfa` (`{content_base64, revit_version?}` → `rfa` bucket, pointer on the family) |
 | `GET /v1/families/{id}/rfa` | Download the built `.rfa` (binary; 404 `NO_RFA` until the worker delivers) |
 | `POST /v1/uploads` | `{filename, content_base64, project_id?}` → `uploads` storage bucket + row (30 MB cap, SHA-256 recorded; identical bytes in the same project dedupe to the existing record) |
-| `POST /v1/extractions` | `{upload_id}` → Claude (Opus 5, structured output over the PDF) → `extractions` row |
+| `POST /v1/extractions` | `{upload_id}` → **202** immediately; Claude (Opus 5, structured output over the PDF) runs in the background — poll `GET /v1/extractions/{id}` until `ready`/`failed`. Rate-limited to 20/hour per caller; real model cost recorded in `cost_usd` |
 | `GET /v1/extractions?status=` | List extractions (default `status=ready` — pending reviews, project-scoped) |
-| `GET /v1/extractions/{id}` | Extraction status + result |
+| `GET /v1/extractions/{id}` | Extraction status + result (+ `cost_usd`, `duration_ms`) |
 | `POST /v1/extractions/{id}/approve` | Prediction → AFIS 1.0 → new `families` row. Optional body `{result}` carries the reviewer's corrections (validated, persisted, audited). The AFIS is fully parametric: placed reference planes, Width/Depth dimensions labeled to family parameters, centering constraints, Height driving the extrusion, NEC zone auto-added for electrical |
 | `GET /v1/projects` | Projects visible to the caller (members see theirs; machine/demo callers see all) |
 | `POST /v1/projects` | `{name, client_name?}` → new project with the caller as admin member (signed-in users only) |

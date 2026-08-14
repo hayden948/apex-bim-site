@@ -16,6 +16,8 @@ const fam = {
   status: "ready",
 };
 const projects = [{ id: "00000000-0000-4000-8000-000000000002", name: "Apex Demo Library", client_name: null, status: "active" }];
+const ASYNC_EX_ID = "a51c0000-0000-4000-8000-000000000000";
+let asyncPolls = 0;
 const j = (res, code, body) => {
   res.writeHead(code, { "Content-Type": "application/json", ...CORS });
   res.end(JSON.stringify(body));
@@ -66,14 +68,21 @@ http.createServer(async (req, res) => {
   };
   if (p === "/v1/extractions" && req.method === "GET")
     return j(res, 200, { extractions: [{ id: "73b8653b-0000-4000-8000-000000000000", status: "ready", category: fam.category, family_name: fam.family_name, filename: "pending.pdf", created_at: "2026-08-11T00:00:00Z" }] });
-  if (/^\/v1\/extractions\/[0-9a-f-]+$/.test(p) && req.method === "GET")
-    return j(res, 200, { id: p.split("/").pop(), status: "ready", claude_result: pendingResult });
-  if (p === "/v1/extractions" && req.method === "POST")
-    return j(res, 201, { id: "73b8653b-0000-4000-8000-000000000000", status: "ready", result: {
-      family_name: fam.family_name, category: fam.category,
-      geometry: { primitive: "box", width: { value: 20, unit: "in" }, depth: { value: 5.75, unit: "in" }, height: { value: 44, unit: "in" } },
-      parameters: [{ name: "Apex_Voltage", spec_type: "Text", group: "Electrical", is_instance: false, value: "208Y/120V", confidence: 0.98 }],
-      warnings: ["Depth read from side elevation"] } });
+  if (/^\/v1\/extractions\/[0-9a-f-]+$/.test(p) && req.method === "GET") {
+    const exId = p.split("/").pop();
+    // The async extraction reports 'processing' on the first poll, then lands
+    // 'ready' with the result — same lifecycle as the real background task.
+    if (exId === ASYNC_EX_ID && asyncPolls++ < 1)
+      return j(res, 200, { id: exId, status: "processing", claude_result: null });
+    const extra = exId === ASYNC_EX_ID
+      ? { cost_usd: 0.1421, duration_ms: 31500, claude_result: { ...pendingResult, warnings: ["Depth read from side elevation"] } }
+      : { claude_result: pendingResult };
+    return j(res, 200, { id: exId, status: "ready", ...extra });
+  }
+  if (p === "/v1/extractions" && req.method === "POST") {
+    asyncPolls = 0;
+    return j(res, 202, { id: ASYNC_EX_ID, status: "processing" });
+  }
   if (p.endsWith("/approve")) {
     // Corrections arrive as {result}; echo the corrected name back like the real API.
     let corrected = null;

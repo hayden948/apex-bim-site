@@ -83,6 +83,7 @@ await page.click("#btnExtract");
 // (it contains "result", the resume echo contains "resumed").
 await waitText("#outExtract", '"result"');
 check((await page.$$eval("#extractReview tbody tr", (r) => r.length)) === 1, "extraction review table");
+check((await text("#outExtract")).includes("cost_usd"), "extraction reports model cost");
 
 // human-in-the-loop: correct the name and a dimension before approving
 await page.fill("#rvName", "Corrected Panelboard XL");

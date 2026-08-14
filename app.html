@@ -339,21 +339,43 @@
     els.extract.disabled = true;
     els.extractStatus.textContent = "Running — Claude is reading the document…";
     try {
+      // The API answers 202 immediately and extracts in the background;
+      // poll the row until it lands in ready/failed. The row survives a
+      // closed tab — it reappears under "Pending reviews".
       const res = await api("/v1/extractions", {
         method: "POST",
         body: JSON.stringify({ upload_id: state.uploadId }),
       });
       state.extractionId = res.id;
-      state.extraction = res.result;
+      const started = Date.now();
+      let e = res;
+      while (e.status === "processing") {
+        if (Date.now() - started > 240000)
+          throw new Error("Extraction is taking longer than 4 minutes — leave this page open or come back and use Resume review once it finishes.");
+        els.extractStatus.textContent =
+          `Running — Claude is reading the document… ${Math.round((Date.now() - started) / 1000)}s`;
+        await new Promise((r) => setTimeout(r, 2500));
+        e = await api(`/v1/extractions/${res.id}`);
+      }
+      if (e.status !== "ready") throw new Error(e.error_message || `Extraction ${e.status}`);
+      state.extraction = e.claude_result;
       els.extractStatus.textContent = "";
-      renderReview(res.result);
+      renderReview(state.extraction);
       els.approve.disabled = false;
-      show(els.outExtract, res);
+      show(els.outExtract, {
+        id: res.id,
+        status: e.status,
+        ...(e.cost_usd != null ? { cost_usd: e.cost_usd } : {}),
+        ...(e.duration_ms != null ? { duration_ms: e.duration_ms } : {}),
+        result: state.extraction,
+      });
     } catch (e) {
       els.extractStatus.textContent = "";
       const nice = e.status === 503
         ? e.message + "\n\nThe API owner needs to run: supabase secrets set ANTHROPIC_API_KEY=sk-ant-…"
-        : e.message;
+        : e.status === 429
+          ? e.message + "\n\nEach extraction is a paid AI call, so they are capped per hour."
+          : e.message;
       show(els.outExtract, nice, true);
     } finally {
       els.extract.disabled = false;
