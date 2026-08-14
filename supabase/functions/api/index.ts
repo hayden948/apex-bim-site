@@ -23,6 +23,7 @@
 //   POST /v1/extractions/:id/approve        extraction → AFIS → families row (library)
 //   GET  /v1/projects                       projects visible to the caller
 //   POST /v1/projects                       {"name","client_name"?} → project (+ caller as admin member)
+//   PATCH /v1/projects/:id                  {"auto_pipeline"?,"auto_min_confidence"?} pipeline settings (admins)
 //   GET  /v1/projects/:id/members           members of a project (members only)
 //   POST /v1/projects/:id/members           {"email","role"?} add member (admins only)
 //   DELETE /v1/projects/:id/members/:uid    remove member (admins only; last admin protected)
@@ -50,7 +51,7 @@ const DEMO_USER = "00000000-0000-4000-8000-000000000001";
 const CORS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, content-type",
-  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
 };
 
 function json(body: unknown, status = 200): Response {
@@ -406,6 +407,8 @@ async function processExtraction(extractionId: string, storageKey: string): Prom
       duration_ms: Date.now() - started,
       cost_usd: extraction.costUsd,
     }).eq("id", extractionId);
+    // Autonomous projects continue on their own: approve -> QA -> RFA job.
+    await autoAdvance(extractionId);
   } catch (e) {
     await supabase.from("extractions").update({
       status: "failed",
@@ -430,6 +433,159 @@ function predProblem(p: any): string | null {
   }
   if (p.parameters != null && !Array.isArray(p.parameters)) return "parameters must be an array";
   return null;
+}
+
+/**
+ * Shared approve core: prediction -> AFIS -> families row, extraction marked
+ * approved. Used by the approve route and by the autonomous pipeline.
+ */
+// deno-lint-ignore no-explicit-any
+async function approveCore(exId: string, projectId: string, pred: any, actor: string, reason: string):
+  Promise<{ fam: { id: string; family_name: string; category: string; status: string } } | { error: string }> {
+  const familyId = crypto.randomUUID();
+  const baseName: string = (typeof pred.family_name === "string" && pred.family_name.trim())
+    ? pred.family_name.trim() : "Extracted Family";
+
+  // Re-processing the same submittal reproduces the same name, and the active
+  // library enforces unique names per project (uq_families_name_active) — so a
+  // collision must not dead-end the pipeline. Retry with a numbered suffix;
+  // the AFIS identity gets the same final name.
+  let fam: { id: string; family_name: string; category: string; status: string } | null = null;
+  let lastErr = "";
+  for (let attempt = 0; attempt < 20 && !fam; attempt++) {
+    const name = attempt === 0 ? baseName : `${baseName} (${attempt + 1})`;
+    const afis = predToAfis(familyId, { ...pred, family_name: name });
+    const { data, error: famErr } = await supabase.from("families").insert({
+      id: familyId,
+      extraction_id: exId,
+      project_id: projectId,
+      family_name: name,
+      category: pred.category ?? "Generic Model",
+      status: "ready",
+      created_by: actor,
+      afis,
+    }).select("id, family_name, category, status").single();
+    if (data) fam = data;
+    else {
+      lastErr = famErr?.message ?? "insert failed";
+      if (famErr?.code !== "23505") break; // only name collisions are retryable
+    }
+  }
+  if (!fam) return { error: lastErr };
+  await supabase.from("extractions").update({
+    status: "approved",
+    approved_at: new Date().toISOString(),
+    approved_by: actor,
+  }).eq("id", exId);
+  try {
+    await supabase.from("audit_log").insert({
+      entity_type: "family", entity_id: fam.id, field: "extraction_approved",
+      new_value: { extraction_id: exId, family_name: fam.family_name },
+      actor_id: actor, reason,
+    });
+  } catch (e) {
+    console.error("audit insert failed", e);
+  }
+  return { fam };
+}
+
+/** Persist QA findings for a family and return the gate result + findings. */
+// deno-lint-ignore no-explicit-any
+async function persistQa(familyId: string, afis: any): Promise<{
+  passed: boolean; score: number; findings: Finding[];
+  summary: { errors: number; warnings: number; info: number };
+}> {
+  const findings = runQaPipeline(afis);
+  await supabase.from("family_validations").delete().eq("family_id", familyId);
+  await supabase.from("family_validations").insert(
+    findings.map((r) => ({
+      family_id: familyId,
+      rule: r.rule,
+      severity: r.severity,
+      passed: r.passed,
+      message: r.message,
+      details: { category: r.category, path: r.path, fix_hint: r.fix_hint, auto_fixable: r.auto_fixable },
+    })),
+  );
+  const count = (sev: string) => findings.filter((r) => !r.passed && r.severity === sev).length;
+  const summary = { errors: count("error"), warnings: count("warning"), info: count("info") };
+  const weight = (s: string) => (s === "error" ? 3 : s === "warning" ? 2 : 1);
+  const total = findings.reduce((a, r) => a + weight(r.severity), 0);
+  const passedW = findings.reduce((a, r) => a + (r.passed ? weight(r.severity) : 0), 0);
+  const score = total ? Math.round((passedW / total) * 100) / 100 : 1;
+  await supabase.from("families").update({ checklist_result: { passed: summary.errors === 0, score } }).eq("id", familyId);
+  return { passed: summary.errors === 0, score, findings, summary };
+}
+
+/**
+ * Autonomous pipeline (projects.auto_pipeline): once an extraction lands
+ * 'ready', approve it when EVERY parameter's confidence clears the project's
+ * bar, then run QA and queue the generate_rfa job. Below the bar (or on any
+ * QA error) the pipeline stops and leaves the row for human review — nothing
+ * is lost, and every automatic step is audited as 'api:auto'.
+ */
+async function autoAdvance(extractionId: string): Promise<void> {
+  try {
+    const { data: ex } = await supabase.from("extractions")
+      .select("id, status, claude_result, uploads(project_id)")
+      .eq("id", extractionId).maybeSingle();
+    if (!ex || ex.status !== "ready" || !ex.claude_result) return;
+    const projectId = (ex as { uploads?: { project_id?: string } }).uploads?.project_id;
+    if (!projectId) return;
+    const { data: proj } = await supabase.from("projects")
+      .select("auto_pipeline, auto_min_confidence").eq("id", projectId).maybeSingle();
+    if (!proj?.auto_pipeline) return;
+
+    const auditAuto = async (entity: string, id: string, event: string, value?: unknown) => {
+      try {
+        await supabase.from("audit_log").insert({
+          entity_type: entity, entity_id: id, field: event,
+          new_value: value ?? null, actor_id: DEMO_USER, reason: "api:auto",
+        });
+      } catch (e) {
+        console.error("audit insert failed", e);
+      }
+    };
+
+    // deno-lint-ignore no-explicit-any
+    const pred = ex.claude_result as any;
+    const minConf = Number(proj.auto_min_confidence ?? 0.9);
+    // deno-lint-ignore no-explicit-any
+    const params: any[] = Array.isArray(pred.parameters) ? pred.parameters : [];
+    const lowest = params.reduce(
+      (m, p) => Math.min(m, typeof p?.confidence === "number" ? p.confidence : 0), 1);
+    if (predProblem(pred) !== null || params.length === 0 || lowest < minConf) {
+      await auditAuto("extraction", extractionId, "auto_review_required",
+        { lowest_confidence: lowest, min_required: minConf, parameters: params.length });
+      return; // stays 'ready' for a human
+    }
+
+    const approved = await approveCore(extractionId, projectId, pred, DEMO_USER, "api:auto");
+    if ("error" in approved) {
+      await auditAuto("extraction", extractionId, "auto_approve_failed", { error: approved.error });
+      return;
+    }
+
+    const { data: famRow } = await supabase.from("families")
+      .select("afis").eq("id", approved.fam.id).maybeSingle();
+    const qa = await persistQa(approved.fam.id, famRow?.afis);
+    if (!qa.passed) {
+      await auditAuto("family", approved.fam.id, "auto_qa_blocked", { score: qa.score });
+      return; // family exists; QA errors need a human
+    }
+
+    const { data: job, error: jobErr } = await supabase.from("jobs")
+      .insert({ kind: "generate_rfa", entity_id: approved.fam.id, status: "queued" })
+      .select("id").single();
+    if (jobErr) {
+      await auditAuto("family", approved.fam.id, "auto_queue_failed", { error: jobErr.message });
+      return;
+    }
+    await auditAuto("job", job.id, "rfa_generation_queued",
+      { family_id: approved.fam.id, qa_score: qa.score });
+  } catch (e) {
+    console.error("autoAdvance failed", e);
+  }
 }
 
 /** Convert an approved extraction (pred shape) into an AFIS 1.0 document. */
@@ -581,7 +737,32 @@ Deno.serve(async (req: Request) => {
       return fail(500, "DB_ERROR", dbErr.message);
     }
     await audit(ctx, "upload", row.id, "upload_created", { filename: row.filename, size_bytes: row.size_bytes });
-    return json(row, 201);
+
+    // Autonomous projects don't wait for an Extract click: start the extraction
+    // as part of the upload (same rate limit; skipped silently if the model key
+    // is missing so the upload itself always succeeds).
+    let autoExtractionId: string | null = null;
+    const { data: projRow } = await supabase.from("projects")
+      .select("auto_pipeline").eq("id", projectId).maybeSingle();
+    if (projRow?.auto_pipeline && Deno.env.get("ANTHROPIC_API_KEY")) {
+      const { data: allowed } = await supabase.rpc("check_rate_limit", {
+        rl_key: `extract:${rateKey(ctx)}`, rl_limit: 20, rl_window_seconds: 3600,
+      });
+      if (allowed) {
+        const { data: ins } = await supabase.from("extractions").insert({
+          upload_id: row.id, schema_version: "1.0.0", status: "processing",
+        }).select("id").single();
+        if (ins) {
+          autoExtractionId = ins.id;
+          const task = processExtraction(ins.id, storageKey);
+          // deno-lint-ignore no-explicit-any
+          const runtime = (globalThis as any).EdgeRuntime;
+          if (runtime?.waitUntil) runtime.waitUntil(task);
+          else await task;
+        }
+      }
+    }
+    return json(autoExtractionId ? { ...row, auto_extraction_id: autoExtractionId } : row, 201);
   }
 
   // ----- extractions -----
@@ -699,26 +880,10 @@ Deno.serve(async (req: Request) => {
         await audit(ctx, "extraction", exId, "extraction_corrected");
       }
 
-      const familyId = crypto.randomUUID();
-      const afis = predToAfis(familyId, pred);
-      const { data: fam, error: famErr } = await supabase.from("families").insert({
-        id: familyId,
-        extraction_id: exId,
-        project_id: exProject ?? defaultProject(ctx) ?? DEMO_PROJECT,
-        family_name: pred.family_name ?? "Extracted Family",
-        category: pred.category ?? "Generic Model",
-        status: "ready",
-        created_by: actorId(ctx),
-        afis,
-      }).select("id, family_name, category, status").single();
-      if (famErr) return fail(500, "DB_ERROR", famErr.message);
-      await supabase.from("extractions").update({
-        status: "approved",
-        approved_at: new Date().toISOString(),
-        approved_by: actorId(ctx),
-      }).eq("id", exId);
-      await audit(ctx, "family", fam.id, "extraction_approved", { extraction_id: exId, family_name: fam.family_name });
-      return json({ family: fam, extraction_id: exId }, 201);
+      const approved = await approveCore(
+        exId, exProject ?? defaultProject(ctx) ?? DEMO_PROJECT, pred, actorId(ctx), `api:${ctx.kind}`);
+      if ("error" in approved) return fail(500, "DB_ERROR", approved.error);
+      return json({ family: approved.fam, extraction_id: exId }, 201);
     }
     return fail(404, "NOT_FOUND", "Unknown action");
   }
@@ -857,9 +1022,42 @@ Deno.serve(async (req: Request) => {
       return fail(404, "NOT_FOUND", "Unknown action");
     }
 
+    // PATCH /v1/projects/:id — pipeline settings (admins and in-scope service tokens).
+    if (parts.length === 3 && req.method === "PATCH") {
+      const projId = parts[2];
+      if (!UUID_RE.test(projId)) return fail(400, "INVALID_PROJECT_ID", "Project id must be a UUID");
+      if (!inScope(ctx, projId)) return fail(404, "PROJECT_NOT_FOUND", `No project ${projId}`);
+      if (ctx.kind === "anon") return fail(403, "FORBIDDEN", "Changing project settings requires a signed-in admin or a service token");
+      if (ctx.kind === "user") {
+        const { data: mem } = await supabase.from("project_members")
+          .select("role").eq("project_id", projId).eq("user_id", ctx.userId).maybeSingle();
+        if (mem?.role !== "admin") return fail(403, "FORBIDDEN", "Only project admins can change pipeline settings");
+      }
+      // deno-lint-ignore no-explicit-any
+      let body: any;
+      try {
+        body = await req.json();
+      } catch {
+        return fail(400, "BAD_JSON", 'Body must be JSON: {"auto_pipeline"?, "auto_min_confidence"?}');
+      }
+      const patch: Record<string, unknown> = {};
+      if (typeof body?.auto_pipeline === "boolean") patch.auto_pipeline = body.auto_pipeline;
+      if (typeof body?.auto_min_confidence === "number" && body.auto_min_confidence >= 0 && body.auto_min_confidence <= 1)
+        patch.auto_min_confidence = body.auto_min_confidence;
+      if (Object.keys(patch).length === 0)
+        return fail(400, "MISSING_FIELDS", "Nothing to update: pass auto_pipeline (boolean) and/or auto_min_confidence (0..1)");
+      const { data: proj, error } = await supabase.from("projects").update(patch)
+        .eq("id", projId).is("deleted_at", null)
+        .select("id, name, auto_pipeline, auto_min_confidence").maybeSingle();
+      if (error) return fail(500, "DB_ERROR", error.message);
+      if (!proj) return fail(404, "PROJECT_NOT_FOUND", `No project ${projId}`);
+      await audit(ctx, "project", projId, "pipeline_settings_changed", patch);
+      return json(proj);
+    }
+
     if (parts.length === 2 && req.method === "GET") {
       let q = supabase.from("projects")
-        .select("id, name, client_name, status, created_at")
+        .select("id, name, client_name, status, created_at, auto_pipeline, auto_min_confidence")
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
         .limit(100);
@@ -1025,37 +1223,14 @@ Deno.serve(async (req: Request) => {
   }
 
   if (action === "validate" && req.method === "POST") {
-    const findings = runQaPipeline(fam.afis);
-    await supabase.from("family_validations").delete().eq("family_id", id);
-    const { error: insErr } = await supabase.from("family_validations").insert(
-      findings.map((r) => ({
-        family_id: id,
-        rule: r.rule,
-        severity: r.severity,
-        passed: r.passed,
-        message: r.message,
-        details: { category: r.category, path: r.path, fix_hint: r.fix_hint, auto_fixable: r.auto_fixable },
-      })),
-    );
-    if (insErr) return fail(500, "DB_ERROR", insErr.message);
-
-    const errors = findings.filter((r) => !r.passed && r.severity === "error").length;
-    const warnings = findings.filter((r) => !r.passed && r.severity === "warning").length;
-    const info = findings.filter((r) => !r.passed && r.severity === "info").length;
-    const weight = (s: string) => (s === "error" ? 3 : s === "warning" ? 2 : 1);
-    const total = findings.reduce((a, r) => a + weight(r.severity), 0);
-    const passedW = findings.reduce((a, r) => a + (r.passed ? weight(r.severity) : 0), 0);
-    const score = total ? Math.round((passedW / total) * 100) / 100 : 1;
-
-    await supabase.from("families").update({ checklist_result: { passed: errors === 0, score } }).eq("id", id);
-
+    const qa = await persistQa(id, fam.afis);
     return json({
       object_id: id,
       family_name: fam.family_name,
-      passed: errors === 0,
-      score,
-      summary: { errors, warnings, info },
-      findings,
+      passed: qa.passed,
+      score: qa.score,
+      summary: qa.summary,
+      findings: qa.findings,
     });
   }
 

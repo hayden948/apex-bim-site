@@ -15,6 +15,12 @@ public class ApexConfig
 {
     [JsonPropertyName("api_url")] public string? ApiUrl { get; set; }
 
+    /// <summary>
+    /// Minutes between automatic queue drains while Revit sits open (the
+    /// Idling-loop worker). 0 = off; toggled by the Auto Process command.
+    /// </summary>
+    [JsonPropertyName("auto_process_minutes")] public int AutoProcessMinutes { get; set; }
+
     public static string ConfigPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Apex", "config.json");
 

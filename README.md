@@ -26,6 +26,36 @@ This repo now holds three components:
    and uploads the built `.rfa` back to the library, where anyone on the
    project can download it.
 
+## Running autonomously (no human in the loop)
+
+The whole pipeline can run itself; three switches make it hands-off:
+
+1. **Auto-build per project** — tick **Auto-build** next to the project picker
+   (or `PATCH /v1/projects/{id} {"auto_pipeline": true}`). From then on an
+   upload extracts immediately, and when every extracted parameter's
+   confidence clears the project bar (`auto_min_confidence`, default 0.9) the
+   API approves it, runs QA, and queues the RFA job on its own — audited as
+   `api:auto`. Low-confidence extractions stop and wait in **Pending reviews**;
+   nothing is auto-approved blind.
+2. **Auto Process in the plugin** — **Generate → Auto Process** toggles a
+   background worker: any Revit session left open (an empty project is fine)
+   drains the RFA queue every 5 minutes via Revit's Idling event, logging to
+   `%LOCALAPPDATA%\Apex\logs` instead of showing dialogs. Point a dedicated
+   workstation or VM at it and family building becomes a service. (The
+   heavier-scale alternative — Autodesk APS Design Automation for Revit,
+   cloud headless builds billed per job — plugs into the same `jobs` queue
+   when needed.)
+3. **Ops run from GitHub** — merging to `main` auto-deploys the edge function
+   and migrations (`.github/workflows/deploy-api.yml`; needs the
+   `SUPABASE_ACCESS_TOKEN` + `SUPABASE_DB_PASSWORD` repo secrets), and a
+   30-minute scheduled health check (`health.yml`) exercises the live API and
+   emails the repo owner on failure.
+
+Net effect: drop a submittal PDF on an auto-build project and, with one Revit
+worker session open anywhere, a finished parametric `.rfa` appears in the
+library with zero clicks — extraction, review gate, QA, build, and upload all
+happen in your own infrastructure.
+
 ---
 
 ## Marketing site

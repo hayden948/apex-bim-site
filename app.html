@@ -95,6 +95,8 @@
         <option value="">(default project)</option>
       </select>
       <button class="con-btn ghost" id="btnNewProj" disabled>New project</button>
+      <label class="hint" style="display:inline-flex;align-items:center;gap:6px" title="Uploads in this project extract, approve (when every parameter's confidence clears the project's bar), pass QA, and queue the RFA build automatically">
+        <input type="checkbox" id="autoPipe" disabled> Auto-build</label>
       <input type="file" id="pdfFile" accept="application/pdf" />
       <button class="con-btn" id="btnUpload" disabled>Upload</button>
     </div>
@@ -152,7 +154,7 @@
     email: $("email"), password: $("password"),
     signin: $("btnSignin"), signup: $("btnSignup"),
     connect: $("btnConnect"), outConnect: $("outConnect"),
-    projSel: $("projSel"), newProj: $("btnNewProj"),
+    projSel: $("projSel"), newProj: $("btnNewProj"), autoPipe: $("autoPipe"),
     file: $("pdfFile"), upload: $("btnUpload"), outUpload: $("outUpload"),
     extract: $("btnExtract"), extractStatus: $("extractStatus"),
     review: $("extractReview"), outExtract: $("outExtract"),
@@ -249,14 +251,41 @@
   async function loadProjects() {
     try {
       const data = await api("/v1/projects");
+      state.projects = data.projects;
       const cur = els.projSel.value;
       els.projSel.innerHTML = '<option value="">(default project)</option>' +
         data.projects.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
       if ([...els.projSel.options].some((o) => o.value === cur)) els.projSel.value = cur;
+      syncAutoPipe();
     } catch {
       // Project listing is a convenience; the console still works without it.
     }
   }
+
+  function syncAutoPipe() {
+    const proj = (state.projects || []).find((p) => p.id === els.projSel.value);
+    els.autoPipe.disabled = !proj;
+    els.autoPipe.checked = !!proj?.auto_pipeline;
+  }
+  els.projSel.addEventListener("change", syncAutoPipe);
+  els.autoPipe.addEventListener("change", async () => {
+    const projId = els.projSel.value;
+    if (!projId) return;
+    try {
+      const p = await api(`/v1/projects/${projId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ auto_pipeline: els.autoPipe.checked }),
+      });
+      const cached = (state.projects || []).find((x) => x.id === p.id);
+      if (cached) cached.auto_pipeline = p.auto_pipeline;
+      show(els.outUpload, p.auto_pipeline
+        ? `Auto-build ON for '${p.name}': uploads extract, approve at ≥${Math.round((p.auto_min_confidence ?? 0.9) * 100)}% confidence, pass QA, and queue the RFA build with no clicks.`
+        : `Auto-build OFF for '${p.name}': extractions wait for review.`);
+    } catch (e) {
+      els.autoPipe.checked = !els.autoPipe.checked;
+      show(els.outUpload, e.message + (e.status === 403 ? " — only project admins can change this." : ""), true);
+    }
+  });
 
   $("btnMint").addEventListener("click", async () => {
     const name = prompt("Token name (e.g. the workstation it's for):", "revit-workstation");
@@ -291,6 +320,7 @@
       show(els.outUpload, `Created project '${p.name}' (${p.id}); you are its admin.`);
       await loadProjects();
       els.projSel.value = p.id;
+      syncAutoPipe();
     } catch (e) {
       show(els.outUpload, e.message + (e.status === 403 ? " — sign in with a user account to create projects." : ""), true);
     }
@@ -329,54 +359,81 @@
       });
       state.uploadId = row.id;
       els.extract.disabled = false;
-      show(els.outUpload, `Uploaded ${row.filename} (${row.size_bytes.toLocaleString()} bytes) — upload id ${row.id}`);
+      show(els.outUpload, `Uploaded ${row.filename} (${row.size_bytes.toLocaleString()} bytes) — upload id ${row.id}`
+        + (row.auto_extraction_id ? " — auto-build started" : ""));
+      if (row.auto_extraction_id) {
+        // Auto-build project: extraction already started server-side.
+        try {
+          await pollExtraction(row.auto_extraction_id);
+        } catch (e) {
+          els.extractStatus.textContent = "";
+          show(els.outExtract, extractionErrorText(e), true);
+        }
+      }
     } catch (e) {
       show(els.outUpload, e.message, true);
     }
   });
 
+  // The API answers 202 immediately and extracts in the background; poll the
+  // row until it lands in ready/failed/approved. The row survives a closed
+  // tab — it reappears under "Pending reviews".
+  async function pollExtraction(id) {
+    state.extractionId = id;
+    const started = Date.now();
+    let e = { status: "processing" };
+    while (e.status === "processing") {
+      if (Date.now() - started > 240000)
+        throw new Error("Extraction is taking longer than 4 minutes — leave this page open or come back and use Resume review once it finishes.");
+      els.extractStatus.textContent =
+        `Running — Claude is reading the document… ${Math.round((Date.now() - started) / 1000)}s`;
+      await new Promise((r) => setTimeout(r, 2500));
+      e = await api(`/v1/extractions/${id}`);
+    }
+    els.extractStatus.textContent = "";
+    if (e.status === "approved") {
+      // The autonomous pipeline got there first: approved + QA'd + job queued.
+      show(els.outExtract, {
+        id, status: e.status, auto_pipeline: true,
+        ...(e.cost_usd != null ? { cost_usd: e.cost_usd } : {}),
+        note: "Auto-build approved this extraction, ran QA, and queued the RFA build — nothing to review.",
+        result: e.claude_result,
+      });
+      return;
+    }
+    if (e.status !== "ready") throw new Error(e.error_message || `Extraction ${e.status}`);
+    state.extraction = e.claude_result;
+    renderReview(state.extraction);
+    els.approve.disabled = false;
+    show(els.outExtract, {
+      id,
+      status: e.status,
+      ...(e.cost_usd != null ? { cost_usd: e.cost_usd } : {}),
+      ...(e.duration_ms != null ? { duration_ms: e.duration_ms } : {}),
+      result: state.extraction,
+    });
+  }
+
+  function extractionErrorText(e) {
+    return e.status === 503
+      ? e.message + "\n\nThe API owner needs to run: supabase secrets set ANTHROPIC_API_KEY=sk-ant-…"
+      : e.status === 429
+        ? e.message + "\n\nEach extraction is a paid AI call, so they are capped per hour."
+        : e.message;
+  }
+
   els.extract.addEventListener("click", async () => {
     els.extract.disabled = true;
     els.extractStatus.textContent = "Running — Claude is reading the document…";
     try {
-      // The API answers 202 immediately and extracts in the background;
-      // poll the row until it lands in ready/failed. The row survives a
-      // closed tab — it reappears under "Pending reviews".
       const res = await api("/v1/extractions", {
         method: "POST",
         body: JSON.stringify({ upload_id: state.uploadId }),
       });
-      state.extractionId = res.id;
-      const started = Date.now();
-      let e = res;
-      while (e.status === "processing") {
-        if (Date.now() - started > 240000)
-          throw new Error("Extraction is taking longer than 4 minutes — leave this page open or come back and use Resume review once it finishes.");
-        els.extractStatus.textContent =
-          `Running — Claude is reading the document… ${Math.round((Date.now() - started) / 1000)}s`;
-        await new Promise((r) => setTimeout(r, 2500));
-        e = await api(`/v1/extractions/${res.id}`);
-      }
-      if (e.status !== "ready") throw new Error(e.error_message || `Extraction ${e.status}`);
-      state.extraction = e.claude_result;
-      els.extractStatus.textContent = "";
-      renderReview(state.extraction);
-      els.approve.disabled = false;
-      show(els.outExtract, {
-        id: res.id,
-        status: e.status,
-        ...(e.cost_usd != null ? { cost_usd: e.cost_usd } : {}),
-        ...(e.duration_ms != null ? { duration_ms: e.duration_ms } : {}),
-        result: state.extraction,
-      });
+      await pollExtraction(res.id);
     } catch (e) {
       els.extractStatus.textContent = "";
-      const nice = e.status === 503
-        ? e.message + "\n\nThe API owner needs to run: supabase secrets set ANTHROPIC_API_KEY=sk-ant-…"
-        : e.status === 429
-          ? e.message + "\n\nEach extraction is a paid AI call, so they are capped per hour."
-          : e.message;
-      show(els.outExtract, nice, true);
+      show(els.outExtract, extractionErrorText(e), true);
     } finally {
       els.extract.disabled = false;
     }

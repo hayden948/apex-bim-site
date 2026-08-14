@@ -63,6 +63,15 @@ await waitText("#outUpload", "Field Ops Project");
 await page.waitForFunction(() => document.querySelector("#projSel")?.value === "2bcc843d-7634-4cbc-8eed-4d317e2f286f");
 check(true, "created project auto-selected");
 
+// --- autonomous pipeline toggle ---
+await page.waitForFunction(() => !document.querySelector("#autoPipe")?.disabled);
+await page.check("#autoPipe");
+await waitText("#outUpload", "Auto-build ON");
+check(true, "auto-build toggle patches project");
+await page.uncheck("#autoPipe");
+await waitText("#outUpload", "Auto-build OFF");
+check(true, "auto-build toggle off");
+
 // --- resume a pending review from the list ---
 await page.waitForSelector('#pendingList button[data-resume]');
 await page.click('#pendingList button[data-resume]');

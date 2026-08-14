@@ -7,7 +7,7 @@ const USER_JWT = "user-jwt-abc123";
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, content-type, apikey",
-  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
 };
 const fam = {
   id: "44d3d55d-dd6c-4011-acee-e23e47a394c4",
@@ -15,7 +15,7 @@ const fam = {
   category: "Electrical Equipment",
   status: "ready",
 };
-const projects = [{ id: "00000000-0000-4000-8000-000000000002", name: "Apex Demo Library", client_name: null, status: "active" }];
+const projects = [{ id: "00000000-0000-4000-8000-000000000002", name: "Apex Demo Library", client_name: null, status: "active", auto_pipeline: false, auto_min_confidence: 0.9 }];
 const ASYNC_EX_ID = "a51c0000-0000-4000-8000-000000000000";
 let asyncPolls = 0;
 const j = (res, code, body) => {
@@ -48,9 +48,17 @@ http.createServer(async (req, res) => {
   if (p === "/v1/projects" && req.method === "GET") return j(res, 200, { projects });
   if (p === "/v1/projects" && req.method === "POST") {
     if (!isUser) return j(res, 403, { error: { code: "FORBIDDEN", message: "Creating a project requires a signed-in user session" } });
-    const np = { id: "2bcc843d-7634-4cbc-8eed-4d317e2f286f", name: JSON.parse(body).name, client_name: null, status: "active" };
+    const np = { id: "2bcc843d-7634-4cbc-8eed-4d317e2f286f", name: JSON.parse(body).name, client_name: null, status: "active", auto_pipeline: false, auto_min_confidence: 0.9 };
     projects.unshift(np);
     return j(res, 201, np);
+  }
+  if (/^\/v1\/projects\/[0-9a-f-]+$/.test(p) && req.method === "PATCH") {
+    const proj = projects.find((x) => x.id === p.split("/").pop());
+    if (!proj) return j(res, 404, { error: { code: "PROJECT_NOT_FOUND", message: "no such project" } });
+    const b = JSON.parse(body || "{}");
+    if (typeof b.auto_pipeline === "boolean") proj.auto_pipeline = b.auto_pipeline;
+    if (typeof b.auto_min_confidence === "number") proj.auto_min_confidence = b.auto_min_confidence;
+    return j(res, 200, { id: proj.id, name: proj.name, auto_pipeline: proj.auto_pipeline, auto_min_confidence: proj.auto_min_confidence });
   }
   if (p === "/v1/tokens" && req.method === "POST") {
     if (!isUser) return j(res, 403, { error: { code: "FORBIDDEN", message: "Managing service tokens requires a signed-in user session" } });

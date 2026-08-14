@@ -23,81 +23,15 @@ public class ProcessQueueCommand : IExternalCommand
     {
         try
         {
-            Autodesk.Revit.ApplicationServices.Application app = c.Application.Application;
-
-            List<JobSummary> queued = ApexApiClient.RunSync(ct =>
-                Session.Api.ListJobsAsync("generate_rfa", "queued", ct));
-            if (queued.Count == 0)
+            DrainResult r = Drain(c.Application.Application);
+            if (r.Queued == 0)
             {
                 TaskDialog.Show("Apex Queue", "No queued RFA-generation jobs.");
                 return Result.Succeeded;
             }
-
-            string outDir = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Apex", "rfa");
-            System.IO.Directory.CreateDirectory(outDir);
-
-            var report = new List<string>();
-            int built = 0, failed = 0, skipped = 0;
-
-            foreach (JobSummary job in queued.Take(MaxJobsPerRun))
-            {
-                JobSummary? claimed = ApexApiClient.RunSync(ct => Session.Api.ClaimJobAsync(job.Id, ct));
-                if (claimed == null)
-                {
-                    skipped++; // another worker claimed it between list and claim
-                    continue;
-                }
-
-                try
-                {
-                    string rfaPath = BuildRfa(app, claimed, outDir);
-
-                    // Round-trip: the library serves the .rfa afterwards (GET /families/:id/rfa).
-                    byte[] rfaBytes = System.IO.File.ReadAllBytes(rfaPath);
-                    string revitVersion = app.VersionNumber;
-                    ApexApiClient.RunSync<object?>(async ct =>
-                    {
-                        await Session.Api.UploadRfaAsync(claimed.EntityId!, rfaBytes, revitVersion, ct);
-                        return null;
-                    }, timeoutSeconds: 120);
-
-                    ApexApiClient.RunSync<object?>(async ct =>
-                    {
-                        await Session.Api.CompleteJobAsync(claimed.Id, succeeded: true, ct: ct);
-                        return null;
-                    });
-                    built++;
-                    report.Add($"OK    {claimed.Id.Substring(0, 8)}  →  {rfaPath} (uploaded)");
-                }
-                catch (Exception ex)
-                {
-                    ApexLog.Error($"Job {claimed.Id} failed.", ex);
-                    try
-                    {
-                        ApexApiClient.RunSync<object?>(async ct =>
-                        {
-                            await Session.Api.CompleteJobAsync(claimed.Id, succeeded: false, error: ex.Message, ct: ct);
-                            return null;
-                        });
-                    }
-                    catch (Exception completeEx)
-                    {
-                        // The job stays 'running' server-side; surface both errors in the log.
-                        ApexLog.Error($"Could not mark job {claimed.Id} failed.", completeEx);
-                    }
-                    failed++;
-                    report.Add($"FAIL  {claimed.Id.Substring(0, 8)}  {ex.Message}");
-                }
-            }
-
-            string summary = $"Processed {built + failed} job(s): {built} built, {failed} failed"
-                + (skipped > 0 ? $", {skipped} taken by another worker" : "")
-                + (queued.Count > MaxJobsPerRun ? $". {queued.Count - MaxJobsPerRun} still queued — run again." : ".");
-            ApexLog.Info("Process Queue: " + summary);
             TaskDialog.Show("Apex Queue (Doc 3 Stage 11)",
-                summary + (report.Count > 0 ? "\n\n" + string.Join("\n", report) : ""));
-            return failed == 0 ? Result.Succeeded : Result.Failed;
+                r.Summary + (r.Report.Count > 0 ? "\n\n" + string.Join("\n", r.Report) : ""));
+            return r.Failed == 0 ? Result.Succeeded : Result.Failed;
         }
         catch (Exception ex)
         {
@@ -105,6 +39,88 @@ public class ProcessQueueCommand : IExternalCommand
             m = ex.Message;
             return Result.Failed;
         }
+    }
+
+    public sealed class DrainResult
+    {
+        public int Queued, Built, Failed, Skipped;
+        public List<string> Report = new List<string>();
+        public string Summary = "";
+    }
+
+    /// <summary>
+    /// Claims and builds up to MaxJobsPerRun queued jobs. Dialog-free so it can
+    /// run from the command (which reports interactively) or from the
+    /// auto-process Idling loop (which only logs).
+    /// </summary>
+    public static DrainResult Drain(Autodesk.Revit.ApplicationServices.Application app)
+    {
+        var r = new DrainResult();
+        List<JobSummary> queued = ApexApiClient.RunSync(ct =>
+            Session.Api.ListJobsAsync("generate_rfa", "queued", ct));
+        r.Queued = queued.Count;
+        if (queued.Count == 0) return r;
+
+        string outDir = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Apex", "rfa");
+        System.IO.Directory.CreateDirectory(outDir);
+
+        foreach (JobSummary job in queued.Take(MaxJobsPerRun))
+        {
+            JobSummary? claimed = ApexApiClient.RunSync(ct => Session.Api.ClaimJobAsync(job.Id, ct));
+            if (claimed == null)
+            {
+                r.Skipped++; // another worker claimed it between list and claim
+                continue;
+            }
+
+            try
+            {
+                string rfaPath = BuildRfa(app, claimed, outDir);
+
+                // Round-trip: the library serves the .rfa afterwards (GET /families/:id/rfa).
+                byte[] rfaBytes = System.IO.File.ReadAllBytes(rfaPath);
+                string revitVersion = app.VersionNumber;
+                ApexApiClient.RunSync<object?>(async ct =>
+                {
+                    await Session.Api.UploadRfaAsync(claimed.EntityId!, rfaBytes, revitVersion, ct);
+                    return null;
+                }, timeoutSeconds: 120);
+
+                ApexApiClient.RunSync<object?>(async ct =>
+                {
+                    await Session.Api.CompleteJobAsync(claimed.Id, succeeded: true, ct: ct);
+                    return null;
+                });
+                r.Built++;
+                r.Report.Add($"OK    {claimed.Id.Substring(0, 8)}  →  {rfaPath} (uploaded)");
+            }
+            catch (Exception ex)
+            {
+                ApexLog.Error($"Job {claimed.Id} failed.", ex);
+                try
+                {
+                    ApexApiClient.RunSync<object?>(async ct =>
+                    {
+                        await Session.Api.CompleteJobAsync(claimed.Id, succeeded: false, error: ex.Message, ct: ct);
+                        return null;
+                    });
+                }
+                catch (Exception completeEx)
+                {
+                    // The job stays 'running' server-side; surface both errors in the log.
+                    ApexLog.Error($"Could not mark job {claimed.Id} failed.", completeEx);
+                }
+                r.Failed++;
+                r.Report.Add($"FAIL  {claimed.Id.Substring(0, 8)}  {ex.Message}");
+            }
+        }
+
+        r.Summary = $"Processed {r.Built + r.Failed} job(s): {r.Built} built, {r.Failed} failed"
+            + (r.Skipped > 0 ? $", {r.Skipped} taken by another worker" : "")
+            + (r.Queued > MaxJobsPerRun ? $". {r.Queued - MaxJobsPerRun} still queued — run again." : ".");
+        ApexLog.Info("Process Queue: " + r.Summary);
+        return r;
     }
 
     /// <summary>Fetches the job's AFIS document and builds it into a saved .rfa.</summary>

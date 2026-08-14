@@ -49,6 +49,12 @@ public class ApexApplication : IExternalApplication
                 "Build the active Apex library family and place it (project) or build into the open family (Family Editor)");
             AddButton(gen, asm, "ApexProcessQueue", "Process Queue", typeof(ProcessQueueCommand),
                 "Build queued RFA-generation jobs from the Apex cloud queue into .rfa files");
+            AddButton(gen, asm, "ApexAutoProcess", "Auto Process", typeof(AutoProcessCommand),
+                "Toggle the background worker: while Revit is open, drain the RFA queue automatically every few minutes");
+
+            // The autonomous worker: while this Revit session idles, drain the
+            // cloud queue on a timer (config.auto_process_minutes; 0 = off).
+            app.Idling += AutoProcessLoop.OnIdling;
 
             AddButton(Panel(app, "M1"), asm, "ApexBuildFromJson", "Build from JSON", typeof(BuildFromPredJsonCommand),
                 "Build a family (.rfa) from a local .pred.json extraction");

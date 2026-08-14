@@ -57,7 +57,8 @@ the token is pinned to the chosen project. Manage with `GET /v1/tokens` and
 | `GET /v1/extractions?status=` | List extractions (default `status=ready` — pending reviews, project-scoped) |
 | `GET /v1/extractions/{id}` | Extraction status + result (+ `cost_usd`, `duration_ms`) |
 | `POST /v1/extractions/{id}/approve` | Prediction → AFIS 1.0 → new `families` row. Optional body `{result}` carries the reviewer's corrections (validated, persisted, audited). The AFIS is fully parametric: placed reference planes, Width/Depth dimensions labeled to family parameters, centering constraints, Height driving the extrusion, NEC zone auto-added for electrical |
-| `GET /v1/projects` | Projects visible to the caller (members see theirs; machine/demo callers see all) |
+| `GET /v1/projects` | Projects visible to the caller (members see theirs; unscoped machine tokens see all; the publishable key sees the demo project) |
+| `PATCH /v1/projects/{id}` | `{auto_pipeline?, auto_min_confidence?}` — autonomous-pipeline settings (project admins / in-scope service tokens). With `auto_pipeline` on, an upload auto-starts extraction, and a result whose every parameter confidence ≥ the bar is auto-approved, QA'd, and queued for RFA (`api:auto` audit trail); low-confidence results wait for human review |
 | `POST /v1/projects` | `{name, client_name?}` → new project with the caller as admin member (signed-in users only) |
 | `GET /v1/projects/{id}/members` | Members with roles (project members only) |
 | `POST /v1/projects/{id}/members` | `{email, role?}` add a member by email (project admins only; the user must have signed in once) |
