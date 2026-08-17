@@ -45,11 +45,18 @@ The whole pipeline can run itself; three switches make it hands-off:
    heavier-scale alternative — Autodesk APS Design Automation for Revit,
    cloud headless builds billed per job — plugs into the same `jobs` queue
    when needed.)
-3. **Ops run from GitHub** — merging to `main` auto-deploys the edge function
+3. **Ops run from GitHub** — merging to `main` auto-deploys both edge functions
    and migrations (`.github/workflows/deploy-api.yml`; needs the
    `SUPABASE_ACCESS_TOKEN` + `SUPABASE_DB_PASSWORD` repo secrets), and a
-   30-minute scheduled health check (`health.yml`) exercises the live API and
-   emails the repo owner on failure.
+   30-minute scheduled health check (`health.yml`) probes `/v1/health` and the
+   live API and emails the repo owner on failure.
+4. **Telegram is the human-in-the-loop surface** — when the autonomous pipeline
+   needs a decision (low-confidence extraction, QA block, failed build) it
+   messages the operator's Telegram chat, and the review happens from the
+   phone: `/pending`, `/approve <id>` (approve + QA + queue RFA in one tap),
+   `/reject <id>`, `/status`. Needs the `TELEGRAM_BOT_TOKEN` secret on the
+   Supabase project for outbound alerts; commands work without it. See
+   `supabase/README.md`.
 
 Net effect: drop a submittal PDF on an auto-build project and, with one Revit
 worker session open anywhere, a finished parametric `.rfa` appears in the

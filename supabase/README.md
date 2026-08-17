@@ -45,6 +45,7 @@ the token is pinned to the chosen project. Manage with `GET /v1/tokens` and
 
 | Route | Behavior |
 |---|---|
+| `GET /v1/health` | Unauthenticated liveness + config probe: `{ok, extraction_enabled, telegram_alerts}` (used by the CI health check) |
 | `GET /v1/families?limit=&cursor=` | List library families (cursor-paginated; `next_cursor` in the response) |
 | `GET /v1/families/{id}` | AFIS 1.0 document (metric) |
 | `POST /v1/families/{id}/validate` | QA Engine: staged S→P→G→E→Z→L rules, Doc 1 §5.8 finding shape, persisted to `family_validations` |
@@ -56,7 +57,8 @@ the token is pinned to the chosen project. Manage with `GET /v1/tokens` and
 | `POST /v1/extractions` | `{upload_id}` → **202** immediately; Claude (Opus 5, structured output over the PDF) runs in the background — poll `GET /v1/extractions/{id}` until `ready`/`failed`. Rate-limited to 20/hour per caller; real model cost recorded in `cost_usd` |
 | `GET /v1/extractions?status=` | List extractions (default `status=ready` — pending reviews, project-scoped) |
 | `GET /v1/extractions/{id}` | Extraction status + result (+ `cost_usd`, `duration_ms`) |
-| `POST /v1/extractions/{id}/approve` | Prediction → AFIS 1.0 → new `families` row. Optional body `{result}` carries the reviewer's corrections (validated, persisted, audited). The AFIS is fully parametric: placed reference planes, Width/Depth dimensions labeled to family parameters, centering constraints, Height driving the extrusion, NEC zone auto-added for electrical |
+| `POST /v1/extractions/{id}/approve` | Prediction → AFIS 1.0 → new `families` row. Optional body `{result}` carries the reviewer's corrections (validated, persisted, audited). With `?chain=1` the call continues through QA and (if it passes) queues the `generate_rfa` job in one round-trip — used by the Telegram `/approve` command. The AFIS is fully parametric: placed reference planes, Width/Depth dimensions labeled to family parameters, centering constraints, Height driving the extrusion, NEC zone auto-added for electrical |
+| `POST /v1/extractions/{id}/reject` | Discard a pending (`ready`) extraction — status → `rejected`, audited; the upload can be re-processed any time |
 | `GET /v1/projects` | Projects visible to the caller (members see theirs; unscoped machine tokens see all; the publishable key sees the demo project) |
 | `PATCH /v1/projects/{id}` | `{auto_pipeline?, auto_min_confidence?}` — autonomous-pipeline settings (project admins / in-scope service tokens). With `auto_pipeline` on, an upload auto-starts extraction, and a result whose every parameter confidence ≥ the bar is auto-approved, QA'd, and queued for RFA (`api:auto` audit trail); low-confidence results wait for human review |
 | `POST /v1/projects` | `{name, client_name?}` → new project with the caller as admin member (signed-in users only) |
@@ -99,6 +101,38 @@ All endpoints were exercised end-to-end after deployment (via in-database
 Seed data: demo project/upload/extraction chain and one library family
 `Panelboard 208V 42ckt` (`a11ce000-0000-4000-8000-000000000001`) with a full
 AFIS document (NEC 110.26 front zone, electrical connector, 3 layout points).
+
+## Telegram (human-in-the-loop from your phone)
+
+Second edge function **`telegram-webhook`** (also custom-auth — deployed with
+`--no-verify-jwt`; Telegram authenticates with the `secret_token` header set at
+webhook registration). It stores every inbound message in `telegram_inbox` and
+answers pipeline commands from the operator chat:
+
+- `/pending` — extractions awaiting review (id prefix, family, lowest confidence)
+- `/approve <id-prefix>` — approve + QA + queue the RFA build (`?chain=1` in one call)
+- `/reject <id-prefix>` — discard a pending extraction
+- `/status` — pending / in-flight / library counts
+
+Outbound alerts (`notify()` in the `api` function) fire at every autonomous-
+pipeline decision point — review needed (with ready-to-tap `/approve` command),
+auto-approved + job queued, QA blocked, extraction failed, RFA built/failed —
+for projects with `auto_pipeline` on.
+
+Configuration — each value is read from the env secret when set
+(`supabase secrets set ...`), else from the service-role-only **`app_config`**
+table (`insert into app_config (key, value) ...`), which keeps secrets out of
+this public repo:
+
+| Env secret | `app_config` key | Purpose |
+|---|---|---|
+| `TELEGRAM_BOT_TOKEN` | `telegram_bot_token` | **Required for outbound alerts**; without it commands still work (webhook replies are tokenless) but pushes are silently skipped. `GET /v1/health` reports the effective state as `telegram_alerts`. |
+| `TELEGRAM_CHAT_ID` | `telegram_chat_id` | Operator chat allowed to run commands (set ✓); alerts fall back to the most recent `telegram_inbox` chat. |
+| `TELEGRAM_WEBHOOK_SECRET` | `telegram_webhook_secret` | Must match the `secret_token` used at webhook registration (set ✓). Missing = webhook fails closed. |
+
+Caveat: any redeploy of either function must keep `--no-verify-jwt` (the CI
+deploy workflow does) — with the platform JWT gate on, Telegram's unauthenticated
+webhook POSTs are rejected before the function runs.
 
 ## Worker
 

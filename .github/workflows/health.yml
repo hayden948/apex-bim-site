@@ -13,6 +13,16 @@ jobs:
   health:
     runs-on: ubuntu-latest
     steps:
+      - name: GET /v1/health must answer ok
+        run: |
+          BASE="https://kdqisuzydkgzkzxlctpv.supabase.co/functions/v1/api"
+          body=$(mktemp)
+          code=$(curl -sS -o "$body" -w "%{http_code}" --max-time 30 "$BASE/v1/health")
+          echo "HTTP $code"
+          cat "$body"
+          [ "$code" = "200" ] || { echo "::error::/v1/health returned HTTP $code"; exit 1; }
+          grep -q '"ok": true' "$body" || { echo "::error::/v1/health did not report ok"; exit 1; }
+
       - name: GET /v1/families must answer 200 with a families array
         run: |
           BASE="https://kdqisuzydkgzkzxlctpv.supabase.co/functions/v1/api"

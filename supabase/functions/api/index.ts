@@ -42,6 +42,66 @@ const supabase = createClient(
 );
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// ---------- Telegram alerts (optional; enabled by the TELEGRAM_BOT_TOKEN secret) ----------
+
+// Telegram settings come from env when set, else from the service-role-only
+// app_config table (kept out of git — this repo is public).
+const configCache = new Map<string, string | null>();
+async function config(envName: string, key: string): Promise<string | null> {
+  const fromEnv = Deno.env.get(envName);
+  if (fromEnv) return fromEnv;
+  if (!configCache.has(key)) {
+    const { data } = await supabase.from("app_config").select("value").eq("key", key).maybeSingle();
+    configCache.set(key, data?.value ?? null);
+  }
+  return configCache.get(key) ?? null;
+}
+
+const tgToken = () => config("TELEGRAM_BOT_TOKEN", "telegram_bot_token");
+
+/** Alert destination: TELEGRAM_CHAT_ID / app_config, else the most recent inbox chat. */
+async function tgChat(): Promise<string | null> {
+  const configured = await config("TELEGRAM_CHAT_ID", "telegram_chat_id");
+  if (configured) return configured;
+  const { data } = await supabase.from("telegram_inbox")
+    .select("chat_id").order("sent_at", { ascending: false }).limit(1).maybeSingle();
+  return data ? String(data.chat_id) : null;
+}
+
+/** Fire-and-forget push to the operator's Telegram; never blocks or fails the pipeline. */
+async function notify(text: string): Promise<void> {
+  try {
+    const token = await tgToken();
+    if (!token) return;
+    const chat = await tgChat();
+    if (!chat) return;
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chat_id: chat, text }),
+    });
+  } catch (e) {
+    console.error("telegram notify failed", e);
+  }
+}
+
+const shortId = (id: string) => id.slice(0, 8);
+
+/** notify(), but only for extractions whose project runs the autonomous pipeline. */
+async function notifyIfAuto(extractionId: string, text: string): Promise<void> {
+  try {
+    const { data } = await supabase.from("extractions")
+      .select("uploads(project_id)").eq("id", extractionId).maybeSingle();
+    const pid = (data as { uploads?: { project_id?: string } } | null)?.uploads?.project_id;
+    if (!pid) return;
+    const { data: proj } = await supabase.from("projects")
+      .select("auto_pipeline").eq("id", pid).maybeSingle();
+    if (proj?.auto_pipeline) await notify(text);
+  } catch (e) {
+    console.error("notifyIfAuto failed", e);
+  }
+}
 const NEC_MIN_CLEARANCE_M = 0.9144; // NEC 110.26 working space, 36 in
 const DEMO_PROJECT = "00000000-0000-4000-8000-000000000002";
 const DEMO_USER = "00000000-0000-4000-8000-000000000001";
@@ -104,6 +164,11 @@ async function authorize(req: Request): Promise<{ ctx: AuthCtx } | { deny: Respo
     await supabase.from("api_tokens").update({ last_used_at: new Date().toISOString() }).eq("id", data.id);
     return { ctx: { kind: "service", projectId: data.project_id ?? null, tokenId: data.id } };
   }
+
+  // Sibling edge functions (telegram-webhook) call the API with the
+  // service-role key, which never leaves the server environment.
+  if (token === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"))
+    return { ctx: { kind: "service", projectId: null, tokenId: "internal" } };
 
   if (token === Deno.env.get("SUPABASE_ANON_KEY")) return { ctx: { kind: "anon" } };
 
@@ -395,6 +460,7 @@ async function processExtraction(extractionId: string, storageKey: string): Prom
       await supabase.from("extractions").update({
         status: "failed", error_message: extraction.message, duration_ms: Date.now() - started,
       }).eq("id", extractionId);
+      await notifyIfAuto(extractionId, `❌ Extraction ${shortId(extractionId)} failed: ${extraction.message}`);
       return;
     }
     // deno-lint-ignore no-explicit-any
@@ -410,11 +476,13 @@ async function processExtraction(extractionId: string, storageKey: string): Prom
     // Autonomous projects continue on their own: approve -> QA -> RFA job.
     await autoAdvance(extractionId);
   } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
     await supabase.from("extractions").update({
       status: "failed",
-      error_message: e instanceof Error ? e.message : String(e),
+      error_message: message,
       duration_ms: Date.now() - started,
     }).eq("id", extractionId);
+    await notifyIfAuto(extractionId, `❌ Extraction ${shortId(extractionId)} failed: ${message}`);
   }
 }
 
@@ -557,12 +625,17 @@ async function autoAdvance(extractionId: string): Promise<void> {
     if (predProblem(pred) !== null || params.length === 0 || lowest < minConf) {
       await auditAuto("extraction", extractionId, "auto_review_required",
         { lowest_confidence: lowest, min_required: minConf, parameters: params.length });
+      await notify(
+        `⏸ Review needed: "${pred?.family_name ?? "unknown"}" — lowest parameter confidence ` +
+        `${lowest.toFixed(2)} is below the ${minConf} bar (${params.length} params).\n` +
+        `/approve ${shortId(extractionId)} · /reject ${shortId(extractionId)} · /pending`);
       return; // stays 'ready' for a human
     }
 
     const approved = await approveCore(extractionId, projectId, pred, DEMO_USER, "api:auto");
     if ("error" in approved) {
       await auditAuto("extraction", extractionId, "auto_approve_failed", { error: approved.error });
+      await notify(`⚠️ Auto-approve failed for extraction ${shortId(extractionId)}: ${approved.error}`);
       return;
     }
 
@@ -571,6 +644,9 @@ async function autoAdvance(extractionId: string): Promise<void> {
     const qa = await persistQa(approved.fam.id, famRow?.afis);
     if (!qa.passed) {
       await auditAuto("family", approved.fam.id, "auto_qa_blocked", { score: qa.score });
+      await notify(
+        `⚠️ "${approved.fam.family_name}" was auto-approved but QA blocked the build ` +
+        `(score ${qa.score}). Fix it in the console.`);
       return; // family exists; QA errors need a human
     }
 
@@ -579,10 +655,14 @@ async function autoAdvance(extractionId: string): Promise<void> {
       .select("id").single();
     if (jobErr) {
       await auditAuto("family", approved.fam.id, "auto_queue_failed", { error: jobErr.message });
+      await notify(`⚠️ Could not queue the RFA build for "${approved.fam.family_name}": ${jobErr.message}`);
       return;
     }
     await auditAuto("job", job.id, "rfa_generation_queued",
       { family_id: approved.fam.id, qa_score: qa.score });
+    await notify(
+      `✅ "${approved.fam.family_name}" auto-approved (all params ≥ ${minConf}) — ` +
+      `QA ${qa.score} — RFA job ${shortId(job.id)} queued.`);
   } catch (e) {
     console.error("autoAdvance failed", e);
   }
@@ -669,14 +749,25 @@ function predToAfis(familyId: string, pred: any): unknown {
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
 
-  const auth = await authorize(req);
-  if ("deny" in auth) return auth.deny;
-  const ctx = auth.ctx;
-
   const url = new URL(req.url);
   const parts = url.pathname.split("/").filter(Boolean);
   while (parts.length && parts[0] === "api") parts.shift();
   if (parts[0] !== "v1") return fail(404, "NOT_FOUND", "Unknown route; try /v1/families");
+
+  // Unauthenticated liveness + config probe (CI health checks, ops).
+  if (parts[1] === "health" && req.method === "GET") {
+    return json({
+      ok: true,
+      service: "apex-api",
+      extraction_enabled: !!Deno.env.get("ANTHROPIC_API_KEY"),
+      telegram_alerts: !!(await tgToken()) && !!(await tgChat()),
+    });
+  }
+
+  const auth = await authorize(req);
+  if ("deny" in auth) return auth.deny;
+  const ctx = auth.ctx;
+
   const resource = parts[1];
 
   // ----- uploads -----
@@ -883,7 +974,42 @@ Deno.serve(async (req: Request) => {
       const approved = await approveCore(
         exId, exProject ?? defaultProject(ctx) ?? DEMO_PROJECT, pred, actorId(ctx), `api:${ctx.kind}`);
       if ("error" in approved) return fail(500, "DB_ERROR", approved.error);
+
+      // ?chain=1 — continue through QA and RFA queueing in one call (used by
+      // the Telegram /approve command and one-click approve-and-build flows).
+      if (url.searchParams.get("chain") === "1") {
+        const { data: famRow } = await supabase.from("families")
+          .select("afis").eq("id", approved.fam.id).maybeSingle();
+        const qa = await persistQa(approved.fam.id, famRow?.afis);
+        let jobId: string | null = null;
+        if (qa.passed) {
+          const { data: job } = await supabase.from("jobs")
+            .insert({ kind: "generate_rfa", entity_id: approved.fam.id, status: "queued" })
+            .select("id").single();
+          jobId = job?.id ?? null;
+          if (jobId) {
+            await audit(ctx, "job", jobId, "rfa_generation_queued",
+              { family_id: approved.fam.id, qa_score: qa.score });
+          }
+        }
+        return json({
+          family: approved.fam, extraction_id: exId,
+          qa: { passed: qa.passed, score: qa.score, summary: qa.summary },
+          job_id: jobId,
+        }, 201);
+      }
       return json({ family: approved.fam, extraction_id: exId }, 201);
+    }
+
+    // POST /v1/extractions/:id/reject — discard a pending result (audited);
+    // the upload can always be re-processed later.
+    if (parts[3] === "reject" && req.method === "POST") {
+      if (ex.status !== "ready") return fail(409, "NOT_READY", `Extraction is '${ex.status}'`);
+      const { error } = await supabase.from("extractions")
+        .update({ status: "rejected" }).eq("id", exId);
+      if (error) return fail(500, "DB_ERROR", error.message);
+      await audit(ctx, "extraction", exId, "extraction_rejected");
+      return json({ id: exId, status: "rejected" });
     }
     return fail(404, "NOT_FOUND", "Unknown action");
   }
@@ -1156,11 +1282,23 @@ Deno.serve(async (req: Request) => {
           last_error: status === "failed" ? String(body?.error ?? "unknown") : null,
         })
         .eq("id", jobId).eq("status", "running")
-        .select("id, status").maybeSingle();
+        .select("id, status, kind, entity_id").maybeSingle();
       if (error) return fail(500, "DB_ERROR", error.message);
       if (!data) return fail(409, "NOT_RUNNING", "Job is not in running state");
       await audit(ctx, "job", jobId, "job_completed", { status });
-      return json(data);
+      if (data.kind === "generate_rfa" && data.entity_id) {
+        const { data: fam } = await supabase.from("families")
+          .select("family_name, project_id").eq("id", data.entity_id).maybeSingle();
+        const { data: proj } = fam?.project_id
+          ? await supabase.from("projects").select("auto_pipeline").eq("id", fam.project_id).maybeSingle()
+          : { data: null };
+        if (proj?.auto_pipeline) {
+          await notify(status === "succeeded"
+            ? `📦 RFA built: "${fam?.family_name}" is in the library.`
+            : `❌ RFA build failed for "${fam?.family_name}": ${String(body?.error ?? "unknown")}`);
+        }
+      }
+      return json({ id: data.id, status: data.status });
     }
     return fail(404, "NOT_FOUND", "Unknown action");
   }
