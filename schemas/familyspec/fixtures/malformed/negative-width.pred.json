@@ -6,7 +6,7 @@
   "geometry": {
     "primitive": "box",
     "width": {
-      "value": 20,
+      "value": -4,
       "unit": "in"
     },
     "depth": {

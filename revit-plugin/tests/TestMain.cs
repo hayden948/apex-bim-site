@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using Apex.BimStudio;
 using Apex.BimStudio.Commands;
@@ -161,7 +163,167 @@ class TestMain
         AssertTrue(desc.StartsWith("apx_0123") && !desc.Contains("abcdef0123"), "token describe shows prefix only");
         AssertTrue(SecretText.Describe("") == "(empty)", "empty token describe");
 
+        RunFamilySpecValidatorTests(opts);
+        RunSchemaContractTest();
+        RunFixtureTests();
+
         Console.WriteLine(_failures == 0 ? "\nALL TESTS PASSED" : $"\n{_failures} FAILURES");
         return _failures == 0 ? 0 : 1;
+    }
+
+    // ---------- FamilySpec v1: boundary validator behavior ----------
+
+    static void RunFamilySpecValidatorTests(JsonSerializerOptions opts)
+    {
+        PredValidator.Result V(string json) =>
+            PredValidator.Validate(JsonDocument.Parse(json).RootElement, "test.pred.json");
+
+        string valid = @"{""schema_version"":""1.0"",""family_name"":""F"",""category"":""Electrical Equipment"",
+          ""geometry"":{""primitive"":""box"",""width"":{""value"":20,""unit"":""in""},
+            ""depth"":{""value"":5,""unit"":""in""},""height"":{""value"":26,""unit"":""in""}},
+          ""parameters"":[{""name"":""Voltage"",""spec_type"":""Number"",""group"":""Electrical"",""is_instance"":false,""value"":208}]}";
+        AssertTrue(V(valid).IsValid, "v1 valid doc passes");
+        AssertTrue(V(valid).Warnings.Count == 0, "v1 valid doc has no warnings");
+
+        var legacy = V(valid.Replace(@"""schema_version"":""1.0"",", ""));
+        AssertTrue(legacy.IsValid && legacy.IsLegacyV0, "missing schema_version -> legacy v0 accepted");
+        AssertTrue(legacy.Warnings.Any(w => w.Contains("schema_version missing")), "legacy v0 warns by name");
+
+        var future = V(valid.Replace(@"""schema_version"":""1.0""", @"""schema_version"":""2.0"""));
+        AssertTrue(!future.IsValid && future.Errors[0].Contains("schema_version"), "unknown version rejected, field named");
+
+        var negDim = V(valid.Replace(@"""value"":20", @"""value"":-4"));
+        AssertTrue(!negDim.IsValid, "negative dimension rejected");
+        AssertTrue(negDim.Errors.Any(e => e.Contains("geometry.width.value") && e.Contains("-4")),
+            "dimension error names field and value");
+
+        var badSpec = V(valid.Replace(@"""spec_type"":""Number""", @"""spec_type"":""Nummber"""));
+        AssertTrue(!badSpec.IsValid && badSpec.Errors.Any(e => e.Contains("spec_type") && e.Contains("Nummber")),
+            "unknown spec_type rejected by name (no silent Text coercion)");
+
+        var unknownField = V(valid.Replace(@"""family_name"":""F"",", @"""family_name"":""F"",""familly_notes"":""x"","));
+        AssertTrue(!unknownField.IsValid && unknownField.Errors.Any(e => e.Contains("familly_notes")),
+            "unknown v1 field rejected by name");
+
+        var noUnit = V(valid.Replace(@"""width"":{""value"":20,""unit"":""in""}", @"""width"":{""value"":20}"));
+        AssertTrue(!noUnit.IsValid && noUnit.Errors.Any(e => e.Contains("geometry.width.unit")),
+            "v1 missing unit rejected by name");
+
+        var arrayRoot = V("[1,2,3]");
+        AssertTrue(!arrayRoot.IsValid && arrayRoot.Errors[0].Contains("root"), "non-object root rejected");
+    }
+
+    // ---------- FamilySpec v1: schema-of-record <-> C# contract ----------
+
+    static string? FindRepoFile(string relative)
+    {
+        string? env = Environment.GetEnvironmentVariable("APEX_REPO_ROOT");
+        foreach (string? start in new[] { env, AppContext.BaseDirectory, Environment.CurrentDirectory })
+        {
+            var dir = start == null ? null : new System.IO.DirectoryInfo(start);
+            while (dir != null)
+            {
+                string candidate = System.IO.Path.Combine(dir.FullName, relative);
+                if (System.IO.File.Exists(candidate) || System.IO.Directory.Exists(candidate)) return candidate;
+                dir = dir.Parent;
+            }
+        }
+        return null;
+    }
+
+    static string[] JsonNames(Type t) => t.GetProperties()
+        .Select(p => (p.GetCustomAttributes(typeof(System.Text.Json.Serialization.JsonPropertyNameAttribute), false)
+            .FirstOrDefault() as System.Text.Json.Serialization.JsonPropertyNameAttribute)?.Name)
+        .Where(n => n != null).Select(n => n!).ToArray();
+
+    static void AssertSetEq(IEnumerable<string> a, IEnumerable<string> b, string label)
+    {
+        var sa = a.OrderBy(x => x).ToArray();
+        var sb = b.OrderBy(x => x).ToArray();
+        bool ok = sa.SequenceEqual(sb);
+        Console.WriteLine($"{(ok ? "PASS" : "FAIL")}  {label}" + (ok ? "" :
+            $": only-in-first [{string.Join(", ", sa.Except(sb))}] only-in-second [{string.Join(", ", sb.Except(sa))}]"));
+        if (!ok) _failures++;
+    }
+
+    static void RunSchemaContractTest()
+    {
+        string? schemaPath = FindRepoFile(System.IO.Path.Combine("schemas", "familyspec", "familyspec.v1.schema.json"));
+        AssertTrue(schemaPath != null, "schema of record located (set APEX_REPO_ROOT if this fails)");
+        if (schemaPath == null) return;
+
+        using var doc = JsonDocument.Parse(System.IO.File.ReadAllText(schemaPath));
+        JsonElement root = doc.RootElement;
+        string[] Names(JsonElement obj) => obj.EnumerateObject().Select(p => p.Name).ToArray();
+        string[] Strings(JsonElement arr) => arr.EnumerateArray().Select(e => e.GetString()!).ToArray();
+        JsonElement props = root.GetProperty("properties");
+
+        // Root object: schema properties == C# DTO names == validator's table.
+        AssertSetEq(Names(props), JsonNames(typeof(PredFamily)), "contract: root props == PredFamily DTO");
+        AssertSetEq(Names(props), PredValidator.RootProperties, "contract: root props == validator table");
+        AssertSetEq(Strings(root.GetProperty("required")), PredValidator.RootRequired, "contract: root required");
+
+        JsonElement geom = props.GetProperty("geometry").GetProperty("properties");
+        AssertSetEq(Names(geom), JsonNames(typeof(PredGeometry)).Concat(new[] { "primitive" }).Distinct(),
+            "contract: geometry props == PredGeometry DTO");
+        AssertSetEq(Names(geom), PredValidator.GeometryProperties, "contract: geometry props == validator table");
+
+        JsonElement dim = root.GetProperty("definitions").GetProperty("dimension").GetProperty("properties");
+        AssertSetEq(Names(dim), JsonNames(typeof(PredDim)), "contract: dimension props == PredDim DTO");
+        AssertSetEq(Names(dim), PredValidator.DimensionProperties, "contract: dimension props == validator table");
+
+        JsonElement par = props.GetProperty("parameters").GetProperty("items").GetProperty("properties");
+        AssertSetEq(Names(par), JsonNames(typeof(PredParam)), "contract: parameter props == PredParam DTO");
+        AssertSetEq(Names(par), PredValidator.ParameterProperties, "contract: parameter props == validator table");
+        AssertSetEq(Strings(props.GetProperty("parameters").GetProperty("items").GetProperty("required")),
+            PredValidator.ParameterRequired, "contract: parameter required");
+
+        AssertSetEq(Strings(par.GetProperty("spec_type").GetProperty("enum")), PredValidator.SpecTypes,
+            "contract: spec_type enum");
+        AssertSetEq(Strings(par.GetProperty("group").GetProperty("enum")), PredValidator.Groups,
+            "contract: group enum");
+        AssertSetEq(Strings(dim.GetProperty("unit").GetProperty("enum")), PredValidator.Units,
+            "contract: unit enum");
+        AssertTrue(root.GetProperty("properties").GetProperty("schema_version").GetProperty("const").GetString()
+            == PredValidator.Version, "contract: schema_version const");
+    }
+
+    // ---------- FamilySpec v1: fixtures ----------
+
+    static void RunFixtureTests()
+    {
+        string? goldenDir = FindRepoFile(System.IO.Path.Combine("schemas", "familyspec", "fixtures", "golden"));
+        string? malformedDir = FindRepoFile(System.IO.Path.Combine("schemas", "familyspec", "fixtures", "malformed"));
+        AssertTrue(goldenDir != null && malformedDir != null, "fixture directories located");
+        if (goldenDir == null || malformedDir == null) return;
+
+        int goldens = 0;
+        foreach (string f in System.IO.Directory.GetFiles(goldenDir, "*.pred.json"))
+        {
+            var r = PredValidator.Validate(
+                JsonDocument.Parse(System.IO.File.ReadAllText(f)).RootElement, System.IO.Path.GetFileName(f));
+            AssertTrue(r.IsValid, $"golden fixture valid: {System.IO.Path.GetFileName(f)}"
+                + (r.IsValid ? "" : " :: " + string.Join(" | ", r.Errors)));
+            goldens++;
+        }
+        AssertTrue(goldens >= 4, $"golden fixture count >= 4 (got {goldens})");
+
+        int malformed = 0;
+        foreach (string f in System.IO.Directory.GetFiles(malformedDir, "*.pred.json"))
+        {
+            string name = System.IO.Path.GetFileName(f);
+            string expectPath = f + ".expected";
+            var r = PredValidator.Validate(JsonDocument.Parse(System.IO.File.ReadAllText(f)).RootElement, name);
+            AssertTrue(!r.IsValid, $"malformed fixture rejected: {name}");
+            if (System.IO.File.Exists(expectPath))
+            {
+                string needle = System.IO.File.ReadAllText(expectPath).Trim();
+                AssertTrue(r.Errors.Any(e => e.Contains(needle)),
+                    $"malformed fixture error names field: {name} (expects substring '{needle}')"
+                    + (r.Errors.Any(e => e.Contains(needle)) ? "" : " :: got: " + string.Join(" | ", r.Errors)));
+            }
+            malformed++;
+        }
+        AssertTrue(malformed >= 4, $"malformed fixture count >= 4 (got {malformed})");
     }
 }

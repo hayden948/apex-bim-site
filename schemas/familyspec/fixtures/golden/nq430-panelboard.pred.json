@@ -1,0 +1,183 @@
+{
+  "schema_version": "1.0",
+  "family_name": "Square D NQ430L2C Lighting and Appliance Panelboard",
+  "family_template": "Metric Electrical Equipment (or Imperial Electrical Equipment) - wall/surface mounted host-based template",
+  "category": "Electrical Equipment",
+  "geometry": {
+    "primitive": "box",
+    "width": {
+      "value": 20,
+      "unit": "in"
+    },
+    "depth": {
+      "value": 5.75,
+      "unit": "in"
+    },
+    "height": {
+      "value": 32,
+      "unit": "in"
+    }
+  },
+  "parameters": [
+    {
+      "name": "Manufacturer",
+      "spec_type": "Text",
+      "group": "Identity Data",
+      "is_instance": false,
+      "value": "Square D by Schneider Electric",
+      "confidence": 0.98
+    },
+    {
+      "name": "Model",
+      "spec_type": "Text",
+      "group": "Identity Data",
+      "is_instance": false,
+      "value": "NQ Series Panelboard",
+      "confidence": 0.95
+    },
+    {
+      "name": "Catalog Number",
+      "spec_type": "Text",
+      "group": "Identity Data",
+      "is_instance": false,
+      "value": "NQ430L2C",
+      "confidence": 0.98
+    },
+    {
+      "name": "Product Description",
+      "spec_type": "Text",
+      "group": "Identity Data",
+      "is_instance": false,
+      "value": "Lighting and Appliance Panelboard",
+      "confidence": 0.96
+    },
+    {
+      "name": "System Voltage",
+      "spec_type": "Text",
+      "group": "Electrical",
+      "is_instance": false,
+      "value": "208Y/120 VAC",
+      "confidence": 0.97
+    },
+    {
+      "name": "Number of Phases",
+      "spec_type": "Integer",
+      "group": "Electrical",
+      "is_instance": false,
+      "value": "3",
+      "confidence": 0.96
+    },
+    {
+      "name": "Number of Wires",
+      "spec_type": "Integer",
+      "group": "Electrical",
+      "is_instance": false,
+      "value": "4",
+      "confidence": 0.96
+    },
+    {
+      "name": "Main Rating",
+      "spec_type": "Number",
+      "group": "Electrical",
+      "is_instance": false,
+      "value": "100",
+      "units": "A",
+      "confidence": 0.97
+    },
+    {
+      "name": "Main Type",
+      "spec_type": "Text",
+      "group": "Electrical",
+      "is_instance": false,
+      "value": "Main Lug Only",
+      "confidence": 0.95
+    },
+    {
+      "name": "Branch Circuits (Maximum)",
+      "spec_type": "Integer",
+      "group": "Electrical",
+      "is_instance": false,
+      "value": "30",
+      "confidence": 0.96
+    },
+    {
+      "name": "Short Circuit Rating",
+      "spec_type": "Number",
+      "group": "Electrical",
+      "is_instance": false,
+      "value": "10",
+      "units": "kA",
+      "confidence": 0.96
+    },
+    {
+      "name": "Frequency",
+      "spec_type": "Number",
+      "group": "Electrical",
+      "is_instance": false,
+      "value": "60",
+      "units": "Hz",
+      "confidence": 0.97
+    },
+    {
+      "name": "Enclosure Type",
+      "spec_type": "Text",
+      "group": "Identity Data",
+      "is_instance": false,
+      "value": "NEMA Type 1",
+      "confidence": 0.93
+    },
+    {
+      "name": "Mounting",
+      "spec_type": "Text",
+      "group": "Constraints",
+      "is_instance": false,
+      "value": "Surface Mounted",
+      "confidence": 0.94
+    },
+    {
+      "name": "Width",
+      "spec_type": "Length",
+      "group": "Dimensions",
+      "is_instance": false,
+      "value": "20",
+      "units": "in",
+      "confidence": 0.98
+    },
+    {
+      "name": "Depth",
+      "spec_type": "Length",
+      "group": "Dimensions",
+      "is_instance": false,
+      "value": "5.75",
+      "units": "in",
+      "confidence": 0.98
+    },
+    {
+      "name": "Height",
+      "spec_type": "Length",
+      "group": "Dimensions",
+      "is_instance": false,
+      "value": "32",
+      "units": "in",
+      "confidence": 0.98
+    },
+    {
+      "name": "Enclosure Weight",
+      "spec_type": "Number",
+      "group": "Identity Data",
+      "is_instance": false,
+      "value": "65",
+      "units": "lb",
+      "confidence": 0.97
+    }
+  ],
+  "warnings": [
+    "Parameter group names must map to valid Revit groups; 'Identity Data' is intended for Manufacturer, Model, Catalog Number, Product Description, Enclosure Type and Enclosure Weight (any typographical variants above should be normalized to 'Identity Data').",
+    "Family template not specified on the submittal; an Electrical Equipment template with face/wall-based hosting is assumed for a surface-mounted panelboard.",
+    "Enclosure described as 'Type 1' \u2014 assumed to mean NEMA Type 1 (indoor, general purpose).",
+    "Dimensions given are enclosure (can) dimensions only; trim/cover overlap, gutter space, and conduit entry locations are not provided.",
+    "NEC 110.26 working clearance in front of the panel is noted but no numeric clearance dimension is given; no clearance parameter was created.",
+    "Weight in lb has no direct Revit spec type as a mass parameter here; captured as Number with units 'lb'.",
+    "No breaker schedule, bus material, neutral/ground bar, or UL listing information provided."
+  ]
+}

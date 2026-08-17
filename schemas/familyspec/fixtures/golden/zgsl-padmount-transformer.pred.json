@@ -1,0 +1,65 @@
+{
+  "schema_version": "1.0",
+  "family_name": "ZGSL-H-1500-34.5-0.48 Pad-Mount Transformer",
+  "category": "Electrical Equipment",
+  "geometry": {
+    "primitive": "box",
+    "width": {
+      "value": 2340,
+      "unit": "mm"
+    },
+    "depth": {
+      "value": 2025,
+      "unit": "mm"
+    },
+    "height": {
+      "value": 1990,
+      "unit": "mm"
+    }
+  },
+  "parameters": [
+    {
+      "name": "Rated Power",
+      "spec_type": "Number",
+      "group": "Electrical",
+      "is_instance": false,
+      "value": "1500",
+      "units": "kVA",
+      "confidence": 1.0
+    },
+    {
+      "name": "Primary Voltage",
+      "spec_type": "Number",
+      "group": "Electrical",
+      "is_instance": false,
+      "value": "34500",
+      "units": "V",
+      "confidence": 1.0
+    },
+    {
+      "name": "Secondary Voltage",
+      "spec_type": "Number",
+      "group": "Electrical",
+      "is_instance": false,
+      "value": "480",
+      "units": "V",
+      "confidence": 1.0
+    },
+    {
+      "name": "Total Weight",
+      "spec_type": "Number",
+      "group": "Identity Data",
+      "is_instance": false,
+      "value": "6260",
+      "units": "kg",
+      "confidence": 1.0
+    },
+    {
+      "name": "Manufacturer Series",
+      "spec_type": "Text",
+      "group": "Identity Data",
+      "is_instance": false,
+      "value": "ZGSL-H"
+    }
+  ]
+}

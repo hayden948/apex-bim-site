@@ -4,7 +4,7 @@
   "family_template": "Electrical Equipment.rft",
   "category": "Electrical Equipment",
   "geometry": {
-    "primitive": "box",
+    "primitive": "sphere",
     "width": {
       "value": 20,
       "unit": "in"

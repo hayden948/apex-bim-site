@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "family_name": "Hidden AHU-9",
+  "category": "Mechanical Equipment",
+  "geometry": {
+    "primitive": "box",
+    "width": {
+      "value": 48,
+      "unit": "in"
+    },
+    "depth": {
+      "value": 30,
+      "unit": "in"
+    },
+    "height": {
+      "value": 60,
+      "unit": "in"
+    }
+  },
+  "parameters": []
+}

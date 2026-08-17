@@ -335,3 +335,125 @@ operator owes: CVE drawings, Sprint 001 fixture .pred.json files, CVE's pinned R
 legal read on Meta NDA, briefing docs (CLAUDE/SPRINT/AGENTS.md) into VCS, TELEGRAM_BOT_TOKEN.
 Round 2 opening acts: re-run V2 on amended register; fixture recovery/reconstruction; schema
 canonicalization decision (P-A AFIS path is live; P-B FamilySpec feeds nothing).
+
+---
+
+## ROUND 2 — one canonical FamilySpec contract
+
+T0 = Mon Aug 17 21:00:39 UTC 2026 (pasted from `date`). Hard stop 23:00:39 UTC.
+Same session as round 1; no compaction; on-disk ledger tail verified against context before start.
+Branch: claude/analysis-improvement-fvnun0 at f4b7938 (no history rewrites this round, per guardrail).
+
+GOAL: one canonical, versioned FamilySpec contract validated at every boundary; the
+pred.json / family_spec.schema.json / C#-DTO fork permanently closed. Sprint 002 "every change
+is breaking" policy honored. NOTE: SPRINT.md is still not in VCS (round-1 gap #10), so the
+"locked Sprint 002 decision" is honored as stated in the round brief; if the actual document
+contradicts this round's interpretation, reconciliation is a logged operator follow-up.
+
+### Cycle 1 (21:00 →) — canonical decision + schema of record
+
+DECISION (rationale + costs in schemas/familyspec/DECISION.md, written this cycle):
+canonical = the pred shape, formalized as **FamilySpec v1** in
+`schemas/familyspec/familyspec.v1.schema.json`, with required `schema_version: "1.0"`.
+AFIS 1.0 remains a DERIVED internal artifact (already versioned via afis_version; single
+writer predToAfis, single reader AfisRevitMapper) — not a competing interchange contract.
+The parser repo's family_spec.schema.json + models.py are declared NON-CANONICAL (nothing
+reads them — proven round 1) and quarantined by decision; physical relocation blocked by
+read-only access to that repo (logged as operator follow-up).
+
+Cycle 1 complete (21:10 UTC). Changed: schemas/familyspec/{DECISION.md, familyspec.v1.schema.json,
+fixtures/golden/*6 files, fixtures/malformed/*6+6 files, fixtures/README.md},
+revit-plugin/src/PredValidator.cs (new), revit-plugin/src/BuildFromPredJsonCommand.cs (validator
+wired before deserialize/build; DTOs gain schema_version/warnings/confidence),
+revit-plugin/examples/panelboard.pred.json (stamped v1), revit-plugin/tests/TestMain.cs
+(validator + schema-contract + fixture tests).
+
+PROVEN (pasted in transcript, summarized):
+- Full suite: `ALL TESTS PASSED` (97 asserts: 53 pre-existing + validator/contract/fixture).
+- Contract test FAILS on deliberate schema break (category→categoryy):
+  `FAIL contract: root props == PredFamily DTO: only-in-first [categoryy] only-in-second [category]`
+  then reverted → `ALL TESTS PASSED`. (EXIT proof #2.)
+- 6 golden fixtures validate; 6 malformed fixtures each rejected WITH the expected named-field
+  substring (missing-family-name, negative-width, bad-spec-type, future-version, unknown-field,
+  sphere-primitive). (EXIT proof #4, C# side.)
+- Golden provenance: live-DB extractions incl. the human-approved NQ430 (18 params), ids in
+  fixtures/README.md. Sprint 001's 19 inputs remain operator-blocked (register #5) — this set is
+  the interim net, NOT a claim that the 19 are reconstructed.
+
+ASSUMED (to be closed later this round): API boundary still unvalidated/unstamped (cycle 2);
+EXTRACTION_SCHEMA parity unchecked (cycle 2); round-trip goldens not yet generated (cycle 3).
+
+Next: api/index.ts validate+stamp, named-field correction errors, parity checker, deploy v26.
+
+### Cycle 2 (21:08 → 21:30 UTC) — API boundary + parity checker + live proofs
+
+Changed: supabase/functions/api/index.ts (familySpecProblems derived from EXTRACTION_SCHEMA;
+extraction output validated+stamped before write; approve validates stored result and
+corrections with named-field messages; legacy stamp accommodation; health reports
+familyspec_version), deployed as **api v26**; schemas/familyspec/tools/check_extraction_schema.py.
+
+PROVEN (pasted in transcript this cycle):
+- deno check on edited api: only the 4 pre-existing stub TS7006s (same as rounds prior).
+- Parity checker: `EXTRACTION_SCHEMA PARITY OK` (allowed divergences A1-A3 documented in the
+  script); negative control (enum value renamed in a schema copy) fails with a named diff and
+  exit 1, then reverts clean.
+- Live v26: GET /v1/health -> `"familyspec_version": "1.0"`.
+- Live named-field rejection (EXIT proof #4, API side, real malformed payload):
+  `400 INVALID_CORRECTION "extraction bdb4d3cf correction: geometry.width.value must be a
+  number > 0 (got -4)"` + second problem naming spec_type "Nummber" in details.problems.
+- Live legacy stamp: synthetic un-versioned extraction approved -> stored claude_result now
+  `schema_version = "1.0"`, status approved; test rows fully deleted afterward (counts pasted).
+
+### Cycle 3 (21:30 → 21:50 UTC) — round-trip goldens + a real defect found and fixed
+
+- Round-trip harness executed against the DEPLOYED pipeline: 6 golden fixtures inserted as
+  synthetic ready extractions on the demo project, approved via
+  `POST /v1/extractions/{id}/approve?chain=1` (all six 201).
+- **DEFECT FOUND BY THE ROUND-TRIP** (the fixture net doing its job on day one):
+  predToAfis filtered width/depth/height names but NOT the server-owned Apex_AfisId — the
+  panelboard-example fixture produced an AFIS with TWO Apex_AfisId parameters, and the
+  extracted one ("example-panelboard-001") would overwrite the family's real id at build time
+  (plugin sets params by name, last write wins). Fixed in predToAfis (drop incoming
+  apex_afisid), deployed as **api v27**; all six re-approved under v27:
+  `afisid_param_count = 1` for 6/6 (pasted).
+- Expected goldens written to schemas/familyspec/fixtures/expected/*.afis.json (normalization:
+  family UUID -> <FAMILY_ID>, " (N)" name suffix stripped — NORMALIZATION.md). Transcription
+  integrity PROVEN in-database: each committed expected doc compared as jsonb against the live
+  family's normalized AFIS — `expected_matches_live = true` for 6/6 (pasted).
+- QA scores recorded per fixture: SB-2 0.88, AHU-9 1.0, NQ430 0.94, panelboard 0.94, T-1 0.94,
+  ZGSL 0.94.
+- DB restored: deleted 73 validations + 6 jobs + 6 families (first pass), then 73/6/6/6/6
+  (validations/jobs/families/extractions/uploads) after regeneration — counts pasted; demo
+  project back to pre-round state.
+- tools/roundtrip.py committed: the operator-runnable regression procedure (psql + live API),
+  same steps that produced the baseline.
+
+#### Quarantine of the dead schema (work item 5) — PROVEN, with one precision
+
+- apex-bim-site: `grep -rn "spec\.json|family_spec|FamilySpec"` over plugin src, supabase,
+  console, CI (excluding the new v1 artifacts' own names) -> **no matches, grep exit 1**
+  (pasted). Nothing in the shipping repo reads the parser FamilySpec shape.
+- apex-parser-service: the P-B service DOES move FamilySpec internally (app/main.py, store.py;
+  poller writes `<job>.familyspec.json` at poller.py:76) but its only consumer hook,
+  `run_revit_addin()`, raises by design — the path terminates at a stub. Quarantine therefore =
+  DECISION.md declaration + this evidence; physically moving files in that repo is blocked by
+  read-only access (operator follow-up, noted in DECISION.md). No deletion performed in
+  apex-bim-site because nothing there is a dead schema definition (AfisModels.cs is live:
+  ProcessQueue worker + QA read AFIS).
+- Environment note: round brief says "grep with Select-String" (PowerShell, operator machine);
+  this container uses grep — same evidence class.
+
+#### RE-EVALUATION (protocol step 3 — cycles 2/4 checkpoint, taken here)
+
+(a) Still highest-value path to EXIT? YES — all five EXIT bullets have evidence; remaining:
+    ledger/register bookkeeping + triple verification.
+(b) Learned that invalidates the starting plan: (1) the "reconstruct the 19 Sprint 001
+    fixtures" first-task is impossible from this container (no source drawings, no outputs in
+    VCS — round-1 evidence stands); built the 6-fixture interim net from live-DB artifacts
+    instead and said so — register row #5 stays open on the operator. (2) The round-trip
+    baseline is DB-content-verified, sidestepping the transcription risk this environment's
+    MCP-only DB access creates. (3) A genuine defect (duplicate Apex_AfisId) surfaced —
+    evidence the net has teeth.
+(c) Avoiding because hard? Codegen for the C# DTOs (no offline NJsonSchema toolchain);
+    declared not viable in-round in DECISION.md, covered by the contract test instead —
+    exactly the fallback the round brief authorizes.

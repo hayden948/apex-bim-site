@@ -1,0 +1,258 @@
+{
+  "afis": {
+    "afis_version": "1.0.0",
+    "connectors": [],
+    "geometry": {
+      "bbox": {
+        "max": [
+          0.254,
+          0.07302499999999999,
+          0.8128
+        ],
+        "min": [
+          -0.254,
+          -0.07302499999999999,
+          0
+        ]
+      },
+      "constraints": [
+        {
+          "refs": [
+            "rp-left",
+            "rp-center-x",
+            "rp-right"
+          ],
+          "type": "equality"
+        },
+        {
+          "refs": [
+            "rp-front",
+            "rp-center-y",
+            "rp-back"
+          ],
+          "type": "equality"
+        }
+      ],
+      "dimensions": [
+        {
+          "id": "dim-width",
+          "label_param": "Width",
+          "references": [
+            "rp-left",
+            "rp-right"
+          ],
+          "value": 0.508
+        },
+        {
+          "id": "dim-depth",
+          "label_param": "Depth",
+          "references": [
+            "rp-front",
+            "rp-back"
+          ],
+          "value": 0.14604999999999999
+        }
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "reference_planes": [
+        {
+          "axis": "x",
+          "id": "rp-center-x",
+          "is_origin": true,
+          "name": "Center X",
+          "offset": 0
+        },
+        {
+          "axis": "y",
+          "id": "rp-center-y",
+          "is_origin": true,
+          "name": "Center Y",
+          "offset": 0
+        },
+        {
+          "axis": "x",
+          "id": "rp-left",
+          "name": "Left",
+          "offset": -0.254
+        },
+        {
+          "axis": "x",
+          "id": "rp-right",
+          "name": "Right",
+          "offset": 0.254
+        },
+        {
+          "axis": "y",
+          "id": "rp-front",
+          "name": "Front",
+          "offset": -0.07302499999999999
+        },
+        {
+          "axis": "y",
+          "id": "rp-back",
+          "name": "Back",
+          "offset": 0.07302499999999999
+        }
+      ],
+      "solids": [
+        {
+          "depth_param": "Height",
+          "id": "s1",
+          "method": "extrusion"
+        }
+      ]
+    },
+    "id": "<FAMILY_ID>",
+    "identity": {
+      "category": "Electrical Equipment",
+      "family_template": "Metric Electrical Equipment (or Imperial Electrical Equipment) - wall/surface mounted host-based template",
+      "name": "Square D NQ430L2C Lighting and Appliance Panelboard"
+    },
+    "parameters": [
+      {
+        "binding": "type",
+        "data_type": "Text",
+        "group": "PG_IDENTITY_DATA",
+        "name": "Apex_AfisId",
+        "value": "<FAMILY_ID>"
+      },
+      {
+        "binding": "type",
+        "data_type": "Text",
+        "group": "PG_IDENTITY_DATA",
+        "name": "Manufacturer",
+        "value": "Square D by Schneider Electric"
+      },
+      {
+        "binding": "type",
+        "data_type": "Text",
+        "group": "PG_IDENTITY_DATA",
+        "name": "Model",
+        "value": "NQ Series Panelboard"
+      },
+      {
+        "binding": "type",
+        "data_type": "Text",
+        "group": "PG_IDENTITY_DATA",
+        "name": "Catalog Number",
+        "value": "NQ430L2C"
+      },
+      {
+        "binding": "type",
+        "data_type": "Text",
+        "group": "PG_IDENTITY_DATA",
+        "name": "Product Description",
+        "value": "Lighting and Appliance Panelboard"
+      },
+      {
+        "binding": "type",
+        "data_type": "Text",
+        "group": "PG_ELECTRICAL",
+        "name": "System Voltage",
+        "value": "208Y/120 VAC"
+      },
+      {
+        "binding": "type",
+        "data_type": "Integer",
+        "group": "PG_ELECTRICAL",
+        "name": "Number of Phases",
+        "value": "3"
+      },
+      {
+        "binding": "type",
+        "data_type": "Integer",
+        "group": "PG_ELECTRICAL",
+        "name": "Number of Wires",
+        "value": "4"
+      },
+      {
+        "binding": "type",
+        "data_type": "Number",
+        "group": "PG_ELECTRICAL",
+        "name": "Main Rating",
+        "unit": "A",
+        "value": "100"
+      },
+      {
+        "binding": "type",
+        "data_type": "Text",
+        "group": "PG_ELECTRICAL",
+        "name": "Main Type",
+        "value": "Main Lug Only"
+      },
+      {
+        "binding": "type",
+        "data_type": "Integer",
+        "group": "PG_ELECTRICAL",
+        "name": "Branch Circuits (Maximum)",
+        "value": "30"
+      },
+      {
+        "binding": "type",
+        "data_type": "Number",
+        "group": "PG_ELECTRICAL",
+        "name": "Short Circuit Rating",
+        "unit": "kA",
+        "value": "10"
+      },
+      {
+        "binding": "type",
+        "data_type": "Number",
+        "group": "PG_ELECTRICAL",
+        "name": "Frequency",
+        "unit": "Hz",
+        "value": "60"
+      },
+      {
+        "binding": "type",
+        "data_type": "Text",
+        "group": "PG_IDENTITY_DATA",
+        "name": "Enclosure Type",
+        "value": "NEMA Type 1"
+      },
+      {
+        "binding": "type",
+        "data_type": "Text",
+        "group": "PG_IDENTITY_DATA",
+        "name": "Mounting",
+        "value": "Surface Mounted"
+      },
+      {
+        "binding": "type",
+        "data_type": "Number",
+        "group": "PG_IDENTITY_DATA",
+        "name": "Enclosure Weight",
+        "unit": "lb",
+        "value": "65"
+      }
+    ],
+    "points": [
+      {
+        "description": "Placement centerline",
+        "id": "p-center",
+        "local": [
+          0,
+          0,
+          0
+        ],
+        "point_code": "CL",
+        "type": "layout"
+      }
+    ],
+    "tier": "type",
+    "zones": [
+      {
+        "depth": 0.9144,
+        "face": "front",
+        "id": "nec-workspace",
+        "is_blocking": true,
+        "type": "service_access"
+      }
+    ]
+  },
+  "qa_score_expected": 0.94
+}

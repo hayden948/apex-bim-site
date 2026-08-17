@@ -465,6 +465,19 @@ async function processExtraction(extractionId: string, storageKey: string): Prom
     }
     // deno-lint-ignore no-explicit-any
     const result = extraction.result as any;
+    // Boundary: validate the model's output BEFORE it is written anywhere.
+    // The model does not emit schema_version (server-owned field); stamp it.
+    const check = familySpecProblems(result, "extraction result");
+    if (check.problems.length > 0) {
+      const msg = check.problems.join("; ");
+      await supabase.from("extractions").update({
+        status: "failed", error_message: `Model output failed FamilySpec v${FAMILYSPEC_VERSION} validation: ${msg}`,
+        duration_ms: Date.now() - started, cost_usd: extraction.costUsd,
+      }).eq("id", extractionId);
+      await notifyIfAuto(extractionId, `❌ Extraction ${shortId(extractionId)} produced an invalid result: ${check.problems[0]}`);
+      return;
+    }
+    result.schema_version = FAMILYSPEC_VERSION;
     await supabase.from("extractions").update({
       status: "ready",
       category: result.category ?? null,
@@ -489,18 +502,123 @@ async function processExtraction(extractionId: string, storageKey: string): Prom
 const M_PER: Record<string, number> = { in: 0.0254, mm: 0.001, cm: 0.01, m: 1, ft: 0.3048 };
 const toMeters = (v: number, unit: string) => v * (M_PER[unit] ?? 0.0254);
 
-/** Shape check for a prediction about to become a family (raw or user-corrected). */
+// ---------- FamilySpec v1 boundary validation ----------
+// Schema of record: schemas/familyspec/familyspec.v1.schema.json (see DECISION.md).
+// Rule tables below are DERIVED from EXTRACTION_SCHEMA (same file, kept in parity
+// with the schema of record by schemas/familyspec/tools/check_extraction_schema.py),
+// so this validator has no third hand-maintained shape definition.
+
+const FAMILYSPEC_VERSION = "1.0";
+
 // deno-lint-ignore no-explicit-any
-function predProblem(p: any): string | null {
-  if (typeof p?.family_name !== "string" || !p.family_name.trim()) return "family_name is required";
-  if (typeof p?.category !== "string" || !p.category.trim()) return "category is required";
-  for (const k of ["width", "depth", "height"]) {
-    const g = p?.geometry?.[k];
-    if (typeof g?.value !== "number" || !(g.value > 0) || !(g?.unit in M_PER))
-      return `geometry.${k} must be {value > 0, unit one of ${Object.keys(M_PER).join("/")}}`;
+const FS = EXTRACTION_SCHEMA as any;
+const FS_PARAM_PROPS: string[] = Object.keys(FS.properties.parameters.items.properties);
+const FS_PARAM_REQUIRED: string[] = [...FS.properties.parameters.items.required];
+const FS_SPEC_TYPES: string[] = [...FS.properties.parameters.items.properties.spec_type.enum];
+const FS_GROUPS: string[] = [...FS.properties.parameters.items.properties.group.enum];
+const FS_UNITS: string[] = [...FS.properties.geometry.properties.width.properties.unit.enum];
+const FS_ROOT_PROPS: string[] = [...Object.keys(FS.properties), "schema_version"];
+
+/**
+ * Validate a would-be FamilySpec v1 document. Returns named-field problems
+ * (empty = valid) plus whether the doc is a legacy v0 (no schema_version —
+ * accepted with the documented accommodation; the caller stamps the version).
+ * An unknown schema_version is always a problem: every change is breaking.
+ */
+// deno-lint-ignore no-explicit-any
+function familySpecProblems(p: any, source: string): { problems: string[]; legacy: boolean } {
+  const problems: string[] = [];
+  const add = (m: string) => problems.push(`${source}: ${m}`);
+
+  if (p === null || typeof p !== "object" || Array.isArray(p)) {
+    add("document root must be a JSON object");
+    return { problems, legacy: false };
   }
-  if (p.parameters != null && !Array.isArray(p.parameters)) return "parameters must be an array";
-  return null;
+
+  const legacy = !("schema_version" in p);
+  if (!legacy && p.schema_version !== FAMILYSPEC_VERSION) {
+    add(`schema_version must be "${FAMILYSPEC_VERSION}" (got ${JSON.stringify(p.schema_version)})`);
+    return { problems, legacy };
+  }
+
+  if (!legacy) {
+    for (const k of Object.keys(p)) {
+      if (!FS_ROOT_PROPS.includes(k)) add(`unknown field '${k}' — not part of FamilySpec v${FAMILYSPEC_VERSION}`);
+    }
+  }
+
+  if (typeof p.family_name !== "string" || !p.family_name.trim()) add("family_name must be a non-empty string");
+  if (typeof p.category !== "string" || !p.category.trim()) add("category must be a non-empty string");
+  if (p.family_template != null && typeof p.family_template !== "string") add("family_template must be a string");
+
+  if (p.geometry === null || typeof p.geometry !== "object" || Array.isArray(p.geometry)) {
+    add("geometry is required (object with primitive/width/depth/height)");
+  } else {
+    if (String(p.geometry.primitive).toLowerCase() !== "box") {
+      add(`geometry.primitive must be "box" (got ${JSON.stringify(p.geometry.primitive)})`);
+    }
+    for (const k of ["width", "depth", "height"]) {
+      const g = p.geometry[k];
+      if (g === null || typeof g !== "object") {
+        add(`geometry.${k} is required ({"value": <number > 0>, "unit": "${FS_UNITS.join("|")}"})`);
+        continue;
+      }
+      if (typeof g.value !== "number" || !(g.value > 0)) {
+        add(`geometry.${k}.value must be a number > 0 (got ${JSON.stringify(g.value)})`);
+      }
+      if (g.unit === undefined) {
+        if (!legacy) add(`geometry.${k}.unit is required (one of ${FS_UNITS.join("/")})`);
+      } else if (!FS_UNITS.includes(g.unit)) {
+        add(`geometry.${k}.unit must be one of ${FS_UNITS.join("/")} (got ${JSON.stringify(g.unit)})`);
+      }
+    }
+  }
+
+  if (!Array.isArray(p.parameters)) {
+    add("parameters is required (array; use [] when the drawing yields none)");
+  } else {
+    p.parameters.forEach((it: unknown, i: number) => {
+      // deno-lint-ignore no-explicit-any
+      const q = it as any;
+      const label = q && typeof q === "object" && typeof q.name === "string"
+        ? `parameters[${i}] ('${q.name}')` : `parameters[${i}]`;
+      if (q === null || typeof q !== "object" || Array.isArray(q)) {
+        add(`${label} must be an object`);
+        return;
+      }
+      if (!legacy) {
+        for (const k of Object.keys(q)) {
+          if (!FS_PARAM_PROPS.includes(k)) add(`unknown field '${label}.${k}' — not part of FamilySpec v${FAMILYSPEC_VERSION}`);
+        }
+      }
+      if (typeof q.name !== "string" || !q.name.trim()) add(`${label}.name must be a non-empty string`);
+      if (!FS_SPEC_TYPES.includes(q.spec_type)) {
+        add(`${label}.spec_type must be one of ${FS_SPEC_TYPES.join(", ")} (got ${JSON.stringify(q.spec_type)})`);
+      }
+      if (!FS_GROUPS.includes(q.group)) {
+        add(`${label}.group must be one of ${FS_GROUPS.join(", ")} (got ${JSON.stringify(q.group)})`);
+      }
+      if (typeof q.is_instance !== "boolean" && !(legacy && q.is_instance === undefined)) {
+        add(`${label}.is_instance must be true or false (got ${JSON.stringify(q.is_instance)})`);
+      }
+      if (!["string", "number", "boolean"].includes(typeof q.value)) {
+        add(`${label}.value must be a string, number, or boolean (got ${JSON.stringify(q.value)})`);
+      }
+      if (q.units != null && typeof q.units !== "string") add(`${label}.units must be a string`);
+      if (q.confidence != null && (typeof q.confidence !== "number" || q.confidence < 0 || q.confidence > 1)) {
+        add(`${label}.confidence must be a number between 0 and 1 (got ${JSON.stringify(q.confidence)})`);
+      }
+      // FS_PARAM_REQUIRED is enforced by the checks above; referenced here so
+      // the derivation from EXTRACTION_SCHEMA stays load-bearing.
+      void FS_PARAM_REQUIRED;
+    });
+  }
+
+  if (p.warnings != null && (!Array.isArray(p.warnings) || p.warnings.some((w: unknown) => typeof w !== "string"))) {
+    add("warnings must be an array of strings");
+  }
+
+  return { problems, legacy };
 }
 
 /**
@@ -622,7 +740,7 @@ async function autoAdvance(extractionId: string): Promise<void> {
     const params: any[] = Array.isArray(pred.parameters) ? pred.parameters : [];
     const lowest = params.reduce(
       (m, p) => Math.min(m, typeof p?.confidence === "number" ? p.confidence : 0), 1);
-    if (predProblem(pred) !== null || params.length === 0 || lowest < minConf) {
+    if (familySpecProblems(pred, "stored result").problems.length > 0 || params.length === 0 || lowest < minConf) {
       await auditAuto("extraction", extractionId, "auto_review_required",
         { lowest_confidence: lowest, min_required: minConf, parameters: params.length });
       await notify(
@@ -719,13 +837,14 @@ function predToAfis(familyId: string, pred: any): unknown {
       { name: "Apex_AfisId", data_type: "Text", binding: "type", group: "PG_IDENTITY_DATA", value: familyId },
       // Width/Depth/Height are carried by geometry (labeled dimensions drive
       // Length parameters in Revit); a duplicate extracted "Width: 20" would
-      // overwrite the Length param with 20 internal feet. Drop them here.
-      // Entries without a usable name (possible in a hand-corrected result)
-      // are dropped too — the plugin could do nothing with them.
+      // overwrite the Length param with 20 internal feet. Apex_AfisId is
+      // server-owned (stamped above) — an incoming one would overwrite the
+      // family's real id at build time (found by the round-2 fixture
+      // round-trip). Entries without a usable name are dropped too.
       // deno-lint-ignore no-explicit-any
       ...(pred.parameters ?? []).filter((p: any) => {
         const name = typeof p?.name === "string" ? p.name.trim().toLowerCase() : "";
-        return name !== "" && !["width", "depth", "height"].includes(name);
+        return name !== "" && !["width", "depth", "height", "apex_afisid"].includes(name);
       // deno-lint-ignore no-explicit-any
       }).map((p: any) => ({
         name: p.name,
@@ -759,6 +878,7 @@ Deno.serve(async (req: Request) => {
     return json({
       ok: true,
       service: "apex-api",
+      familyspec_version: FAMILYSPEC_VERSION,
       extraction_enabled: !!Deno.env.get("ANTHROPIC_API_KEY"),
       telegram_alerts: !!(await tgToken()) && !!(await tgChat()),
     });
@@ -960,15 +1080,25 @@ Deno.serve(async (req: Request) => {
       try {
         const body = await req.json();
         if (body?.result && typeof body.result === "object") {
-          const problem = predProblem(body.result);
-          if (problem) return fail(400, "INVALID_CORRECTION", problem);
-          pred = body.result;
+          const c = familySpecProblems(body.result, `extraction ${shortId(exId)} correction`);
+          if (c.problems.length > 0) {
+            return fail(400, "INVALID_CORRECTION", c.problems[0], { problems: c.problems });
+          }
+          pred = { ...body.result, schema_version: FAMILYSPEC_VERSION };
           corrected = true;
         }
       } catch { /* empty body -> approve the stored result as-is */ }
-      if (corrected) {
+      // Boundary: nothing reaches predToAfis without passing v1 validation.
+      // Legacy rows (pre-v1, no schema_version) are accepted and stamped —
+      // the one documented accommodation (schemas/familyspec/DECISION.md).
+      const stored = familySpecProblems(pred, `extraction ${shortId(exId)} result`);
+      if (stored.problems.length > 0) {
+        return fail(422, "INVALID_STORED_RESULT", stored.problems[0], { problems: stored.problems });
+      }
+      if (stored.legacy) pred = { ...pred, schema_version: FAMILYSPEC_VERSION };
+      if (corrected || stored.legacy) {
         await supabase.from("extractions").update({ claude_result: pred }).eq("id", exId);
-        await audit(ctx, "extraction", exId, "extraction_corrected");
+        if (corrected) await audit(ctx, "extraction", exId, "extraction_corrected");
       }
 
       const approved = await approveCore(

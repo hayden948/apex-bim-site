@@ -16,11 +16,13 @@ namespace Apex.BimStudio.Commands;
 
 public class PredFamily
 {
+    [JsonPropertyName("schema_version")] public string? SchemaVersion { get; set; }
     [JsonPropertyName("family_name")] public string? FamilyName { get; set; }
     [JsonPropertyName("family_template")] public string? FamilyTemplate { get; set; }
     [JsonPropertyName("category")] public string? Category { get; set; }
     [JsonPropertyName("parameters")] public List<PredParam>? Parameters { get; set; }
     [JsonPropertyName("geometry")] public PredGeometry? Geometry { get; set; }
+    [JsonPropertyName("warnings")] public List<string>? Warnings { get; set; }
 }
 
 public class PredParam
@@ -31,6 +33,7 @@ public class PredParam
     [JsonPropertyName("is_instance")] public bool IsInstance { get; set; }
     [JsonPropertyName("value")] public JsonElement ValueRaw { get; set; }
     [JsonPropertyName("units")] public string? Units { get; set; }
+    [JsonPropertyName("confidence")] public double? Confidence { get; set; }
 
     [JsonIgnore]
     public string? Value => ValueRaw.ValueKind switch
@@ -98,10 +101,29 @@ public class BuildFromPredJsonCommand : IExternalCommand
         if (dlg.ShowDialog() != true) return Result.Cancelled;
 
         string inputPath = dlg.FileName;
+        string fileLabel = Path.GetFileName(inputPath);
         PredFamily pred;
+        PredValidator.Result check;
         try
         {
             string text = File.ReadAllText(inputPath);
+            using JsonDocument doc = JsonDocument.Parse(text);
+
+            // FamilySpec v1 boundary validation BEFORE deserialization and any
+            // Revit call: invalid input gets a named-field message, not a
+            // stack trace or a silent default (schemas/familyspec/DECISION.md).
+            check = PredValidator.Validate(doc.RootElement, fileLabel);
+            if (!check.IsValid)
+            {
+                string detail = string.Join("\n", check.Errors.Take(12))
+                    + (check.Errors.Count > 12 ? $"\n…and {check.Errors.Count - 12} more." : "");
+                ApexLog.Warn($"FamilySpec validation failed for {fileLabel}:\n{detail}");
+                message = $"This file is not a valid FamilySpec v{PredValidator.Version}:\n\n{detail}";
+                TaskDialog.Show("Apex — invalid .pred.json", message);
+                return Result.Failed;
+            }
+            foreach (string w in check.Warnings) ApexLog.Warn(w);
+
             var opts = new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true,
@@ -109,6 +131,13 @@ public class BuildFromPredJsonCommand : IExternalCommand
             };
             pred = JsonSerializer.Deserialize<PredFamily>(text, opts)
                 ?? throw new InvalidOperationException("Deserialized to null.");
+        }
+        catch (JsonException ex)
+        {
+            ApexLog.Error("Could not parse .pred.json.", ex);
+            message = $"{fileLabel} is not valid JSON: {ex.Message}";
+            TaskDialog.Show("Apex — invalid .pred.json", message);
+            return Result.Failed;
         }
         catch (Exception ex)
         {
@@ -118,10 +147,11 @@ public class BuildFromPredJsonCommand : IExternalCommand
             return Result.Failed;
         }
 
-        if (pred.Geometry == null || !string.Equals(pred.Geometry.Primitive, "box", StringComparison.OrdinalIgnoreCase))
+        if (pred.Geometry == null)
         {
-            message = "M1 supports geometry.primitive = \"box\" only.";
-            TaskDialog.Show("Apex M1", message);
+            // Unreachable after validation; keeps the null-flow explicit.
+            message = $"{fileLabel}: geometry is required.";
+            TaskDialog.Show("Apex — invalid .pred.json", message);
             return Result.Failed;
         }
 

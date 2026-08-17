@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "family_name": "Transformer T-1 (Corrected)",
+  "category": "Electrical Equipment",
+  "geometry": {
+    "primitive": "box",
+    "width": {
+      "value": 32,
+      "unit": "in"
+    },
+    "depth": {
+      "value": 24,
+      "unit": "in"
+    },
+    "height": {
+      "value": 36,
+      "unit": "in"
+    }
+  },
+  "parameters": [
+    {
+      "name": "Apex_Voltage",
+      "spec_type": "Text",
+      "group": "Electrical",
+      "is_instance": false,
+      "value": "480Y/277V",
+      "confidence": 0.9
+    }
+  ]
+}

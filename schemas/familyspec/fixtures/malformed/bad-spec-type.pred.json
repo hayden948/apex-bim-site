@@ -45,7 +45,7 @@
     },
     {
       "name": "Voltage",
-      "spec_type": "Number",
+      "spec_type": "Nummber",
       "group": "Electrical",
       "is_instance": false,
       "value": 208
