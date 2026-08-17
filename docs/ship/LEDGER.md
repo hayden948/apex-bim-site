@@ -457,3 +457,27 @@ PROVEN (pasted in transcript this cycle):
 (c) Avoiding because hard? Codegen for the C# DTOs (no offline NJsonSchema toolchain);
     declared not viable in-round in DECISION.md, covered by the contract test instead —
     exactly the fallback the round brief authorizes.
+
+### Cycle 4 (21:50 → UTC) — triple verification + close
+
+Final V3 gate re-run after all edits (pasted): net48 exit 0, net8 exit 0, `ALL TESTS PASSED`,
+`EXTRACTION_SCHEMA PARITY OK`, `REGISTER CHECK PASSED: 16 evidenced rows`. Work pushed as
+5ded7ac (37 files, +3162/-36).
+
+V1 SELF — claims I cannot back with output produced this round (explicit list):
+1. "Deployed api v27 byte-matches the local file": the deploy payload was assembled in-context,
+   not binary-diffed against disk. Backed instead by behavior: deno check on the disk file,
+   live health familyspec_version, live INVALID_CORRECTION, 6/6 afisid_param_count=1 under
+   v27 — the changed code paths are provably live; untouched routes rest on the v26-era live
+   tests. Residual risk accepted and stated.
+2. "Plugin shows the named-field dialog": PredValidator's messages are proven by the suite;
+   the TaskDialog presentation itself cannot execute here (no Revit — register row #2).
+3. "Sprint 001 legacy files will validate as v0": inferred from the v0 rules; no actual
+   Sprint 001 file exists in reach to test.
+4. roundtrip.py as a script was not executed end-to-end here (needs psql + APEX_DB_URL);
+   the procedure it encodes WAS executed step-by-step (MCP SQL + live http) and produced the
+   content-verified baseline. The script is the documented re-run path for the operator.
+
+V2 ADVERSARIAL — ship-reviewer agent (registered this session) launched with the charge:
+find a code path still reading a non-canonical shape, and a validation bypass. Verdict
+recorded below on return.
