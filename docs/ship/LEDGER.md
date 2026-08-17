@@ -266,3 +266,72 @@ exit: 1
 ```
 
 V3 verdict: GREEN — the check passes on the real register and demonstrably fails on broken input.
+
+### Cycle 4 (20:55:44 UTC per `date`) — V2 verdict + register revision
+
+#### V2 ADVERSARIAL verdict: **REFUTED** (register was incomplete)
+
+Reviewer (read-only subagent, given ONLY the claim + acceptance criteria + repo access, no
+author conclusions) found four materially omitted categories plus two lesser ones:
+
+1. Customer data handling/confidentiality/consent — pipeline sends full customer PDFs to
+   Anthropic (`api/index.ts` extraction call) and stores them in Supabase; no privacy
+   policy/terms (site footer links are `href="#"`), no deletion endpoint (only DELETE route in
+   the API is project members; `uploads.deleted_at` is never set by any endpoint), no retention
+   statement. A Meta-project NDA could make the demo upload itself a breach.
+2. .rfa Revit-version compatibility with the customer's pinned project version — worker builds
+   on whatever Revit it runs (`ProcessQueueCommand.cs` records `app.VersionNumber`); nothing
+   targets/checks CVE's version; .rfa files don't open in older Revit.
+3. Demo-day worker availability + latency — the build stage is a Revit session left open
+   polling every 5 min (`AutoProcessCommand.cs`), 15-min stale requeue; no run-of-show names
+   the machine or the expected per-family wall time.
+4. Customer account/credential provisioning — email-confirmation signup loop, ~1 h session
+   expiry mid-meeting, `apx_` token minting prerequisite, and plugin OAuth endpoints pointing
+   at nonexistent `auth.apex.example`.
+5. Input-document constraints — 30 MB upload gate exceeds the ~24 MB practical model-call limit
+   (base64 inflation vs 32 MB request cap); one-unit-per-PDF prompt assumption vs multi-unit
+   submittal packages; no splitting stage.
+6. (minor) Customer-visible web surface not audited (dead footer links, claims pages).
+
+Reviewer's "could not check from here": deployed-function-vs-repo drift, CVE's actual
+contract/Revit version, operator-machine-only artifacts, live reproduction of the size/expiry
+limits, physical-meeting logistics (venue network egress etc.).
+
+Note on V1-vs-V2 independence: V1 SELF found labeling issues only; V2 found whole missing
+categories. The disagreement is evidence the reviewer was not led. Findings accepted in full.
+
+#### Register revision (this cycle)
+
+`SHIP_READINESS.md`: added rows 11–16 (one per V2 finding), re-ranked the ship-blocking five —
+data/NDA (#11) now ranks first, demo-day delivery chain (#12+#13+#14) enters at fifth — and
+rewrote the rounds-2–5 verdict: #1 data/NDA is closed by NO scoped round (operator/legal action
+plus unscheduled engineering: deletion endpoint, retention statement, or a no-cloud demo mode
+via local BuildFromPredJson); round 5's brief must widen to cover version-pin, worker machine,
+and credential preflight.
+
+#### Register checker re-run after revision (PROVEN — pasted)
+
+```
+$ python3 docs/ship/check_register.py
+REGISTER CHECK PASSED: 16 evidenced rows, T0 present, no banned words, coverage terms present.
+exit: 0
+```
+
+Confirmed: the run executed immediately after this edit produced exactly the output above
+(exit 0, 16 rows).
+
+#### ROUND 1 EXIT status
+
+- `.claude/LOOP.md`, `docs/ship/LEDGER.md`: EXIST (this file), pushed in db683dd.
+- `SHIP_READINESS.md`: EXISTS, every current-state cell evidence-referenced, ranked.
+- Triple verification on "register is complete": V1 (3 unbackable-claim labels), V2 REFUTED →
+  register amended with all findings, V3 checker green with a demonstrated failure mode.
+  Post-amendment claim is "register is complete AS OF the V2 findings"; a fresh V2 pass on the
+  amended register is round 2's opening act, per the be-suspicious-of-agreement rule.
+- Ship-blocking five + rounds-2–5 verdict: recorded in SHIP_READINESS.md § re-ranked verdict.
+
+HANDOFF NOTE for round 2 (fresh-agent assumptions): read LOOP.md + this ledger fully; the
+operator owes: CVE drawings, Sprint 001 fixture .pred.json files, CVE's pinned Revit version,
+legal read on Meta NDA, briefing docs (CLAUDE/SPRINT/AGENTS.md) into VCS, TELEGRAM_BOT_TOKEN.
+Round 2 opening acts: re-run V2 on amended register; fixture recovery/reconstruction; schema
+canonicalization decision (P-A AFIS path is live; P-B FamilySpec feeds nothing).
