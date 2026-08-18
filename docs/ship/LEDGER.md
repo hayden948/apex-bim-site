@@ -1169,3 +1169,9 @@ HANDOFF for round 5 (and operator):
   semantics (schema v1.1); undocked-view-window EnableWindow coverage; per-field provenance
   (v1.1).
 - Round 5 as briefed (packaging/rehearsal) should consume the walkthrough results FIRST.
+
+**Round close confirmation (21:12 UTC):** Windows CI run 25 (commit 987c3bf) = completed,
+success (run 32186260537, started 21:09:46Z, finished 21:10:58Z). Every round-4 commit —
+1279d84, b9f4510, 54e064b, 61104a5, fb5fbe3, 987c3bf — is green on the authoritative
+windows-latest toolchain (real .NET SDK + WPF, test project executed). ROUND 4 CLOSED at
+T0+79 min, inside the 120-min stop.
