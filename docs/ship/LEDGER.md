@@ -665,3 +665,63 @@ the containment claims match the code. Verdict recorded below on return.
 V3 EMPIRICAL — final gate re-run after all edits (pasted): both targets compile with zero
 errors, `ALL TESTS PASSED`, `EXTRACTION_SCHEMA PARITY OK`, `REGISTER CHECK PASSED: 16 rows`.
 Work pushed as 2b1e672 (11 files, +713/−30) at 19:38 UTC (T0+68min).
+
+#### V2 ADVERSARIAL verdict: **REFUTED** (honesty of rates/holdout SURVIVED; containment claim (e) failed) — disposition
+
+What survived, per the reviewer's own verification: no success rate claimed for unseen inputs
+anywhere; zero customer artifacts confirmed independently; holdout genuinely
+BLOCKED-ON-OPERATOR, protocol untouched; HUMAN-VERIFY markings intact.
+
+Findings and dispositions (all four code defects FIXED this cycle, rebuilt, suite green):
+1. family_name-derived output paths could collide across drawings — a failing drawing could
+   DELETE another's finished .rfa (BuildToFile cleanup), or a succeeding one silently
+   overwrite it, while the matrix kept reporting SUCCESS. FIXED: batch outputs derive from the
+   input filename (unique per folder by construction); matrix carries relative paths only.
+2. Bookkeeping writes (jsonl append, quarantine marker) sat OUTSIDE try/catch — a locked file
+   or MAX_PATH-length marker name could abort the whole batch, contradicting the checklist's
+   flat "NEVER stops" claim. FIXED: all bookkeeping wrapped, failures counted + surfaced in
+   the summary; marker names bounded (100 chars + stable hash) with tests; checklist rewritten
+   to state the claim as DESIGNED behavior whose first real verification is the operator run.
+3. Stale artifacts across re-runs (append-only jsonl, surviving markers, stale out/*.rfa after
+   a later validation failure) manufactured exactly the "containment bug" the checklist
+   defines. FIXED: fresh-run semantics — jsonl reset with a run header, markers cleared,
+   each input's stale output deleted before processing.
+4. The mandated two-copy determinism diff could NEVER pass: the matrix embedded the absolute
+   batch folder and absolute rfa paths. FIXED: no absolute paths in the matrix (constant run
+   label; relative out/ paths; folder recorded in the jsonl header instead).
+5. Quarantine marker promised "stack" but wrote message-only. FIXED: full exception detail
+   (ToString incl. stack) now in marker + jsonl row.
+6. RUN_MATRIX taxonomy conflated API-stage observations with harness observations. FIXED in
+   doc: stage-attributed section; explicit statement that the harness's own failure paths have
+   executed nowhere and the operator run is their first verification; pre-Revit BadInput slice
+   now covered by a suite test.
+7. Version labels per matrix row corrected (v27/v28/v29 as measured).
+Residual (accepted, stated): commit 2b1e672's message asserts "one bad drawing never aborts
+the batch" as fact — history is not rewritten (guardrail); this entry is the correction.
+
+Post-fix V3 gate (pasted): both targets 0 errors, ALL TESTS PASSED (incl. bounded-marker,
+stable-hash, pre-Revit BadInput tests) at 19:43:56 UTC.
+
+#### ROUND 3 EXIT status (final)
+
+- Harness: BUILT (code + tests + operator kit), execution HUMAN-VERIFY-REQUIRED — per the
+  round brief's fallback clause, not reported as done.
+- RUN_MATRIX.md: complete and honest — stage-scoped, every attempted input listed, stage
+  attribution corrected after V2.
+- Failure taxonomy: implemented + counted where observed; harness-side counts await the
+  operator run.
+- Determinism: PROVEN for the API half (identical normalized AFIS + QA on double-approve) and
+  parser CLI (timestamp-only diff); Revit half is HUMAN-VERIFY with a now-passable procedure.
+- Corrupted input fails safely: PROVEN live at the API stage (named cause, 1.4 s, isolated);
+  harness stage: pre-Revit slice proven, remainder HUMAN-VERIFY.
+- QA coverage per fixed class: P-4 added; P-4/S-2/G-1 each PROVEN TO FAIL live (v29).
+- Holdout + headline number: BLOCKED-ON-OPERATOR. THE BLUNT SENTENCE: the true success rate
+  of this pipeline on Meta EMT 11990 drawings is UNKNOWN — not one of those drawings has ever
+  touched any stage of it, so the 2-month plan is currently resting on zero direct evidence.
+- Triple verification: V1 four unbackable claims listed; V2 REFUTED → 4 code fixes + 3 doc
+  fixes, honesty core survived; V3 green post-fix.
+
+HANDOFF for round 4: operator owes drawings (through the #11 data-handling gate first),
+Sprint 001 fixtures, CVE Revit version, briefing docs, TELEGRAM_BOT_TOKEN. Round-4 accuracy
+work is meaningless until real drawings exist; if they arrive, run the batch kit FIRST, then
+tune, keeping the holdout sealed.

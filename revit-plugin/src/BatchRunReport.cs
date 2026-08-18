@@ -42,7 +42,13 @@ public static class BatchRunReport
         public int ParamsValued;
         public bool FlexWidth, FlexDepth, FlexHeight, Centered;
         public long WallMs;
+        /// <summary>Relative to the batch folder (e.g. "out/x.rfa") — absolute
+        /// paths in the matrix would make the two-copy determinism diff
+        /// impossible to pass (adversarial finding 4).</summary>
         public string? RfaPath;
+        /// <summary>Full exception detail incl. stack — jsonl + quarantine
+        /// marker only, never the matrix.</summary>
+        public string? Detail;
     }
 
     /// <summary>Classify an exception into the taxonomy without referencing Revit types.</summary>
@@ -70,11 +76,22 @@ public static class BatchRunReport
         flex = new { width = r.FlexWidth, depth = r.FlexDepth, height = r.FlexHeight, centered = r.Centered },
         wall_ms = r.WallMs,
         rfa = r.RfaPath,
+        detail = r.Detail,
     });
 
-    /// <summary>Quarantine marker path for a failed input (never looks like a finished .rfa).</summary>
+    /// <summary>
+    /// Quarantine marker path for a failed input (never looks like a finished
+    /// .rfa). Long input names are truncated with a stable hash suffix so the
+    /// marker write itself cannot die on MAX_PATH (adversarial finding 2).
+    /// </summary>
     public static string QuarantineMarkerName(string inputFileName)
-        => inputFileName + ".FAILED.txt";
+    {
+        const int MaxBase = 120;
+        if (inputFileName.Length <= MaxBase) return inputFileName + ".FAILED.txt";
+        uint hash = 2166136261;
+        foreach (char c in inputFileName) hash = (hash ^ c) * 16777619;
+        return inputFileName.Substring(0, 100) + "~" + hash.ToString("x8") + ".FAILED.txt";
+    }
 
     /// <summary>
     /// RUN_MATRIX.md content: one row per drawing (no cherry-picking — the

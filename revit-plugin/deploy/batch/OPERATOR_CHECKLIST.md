@@ -28,7 +28,11 @@ ship ledger marks HUMAN-VERIFY-REQUIRED. Send back the four artifacts in step 6.
      **Batch Build**, pick any file in the folder; or
    - **Scripted**: `powershell -File run-batch.ps1 -BatchDir C:\apex\batch1` (see the
      journal note inside that script — journal replay needs a one-time recording).
-   The batch NEVER stops on a bad drawing: failures are quarantined, the rest continue.
+   The batch is DESIGNED never to stop on a bad drawing: failures are quarantined, the rest
+   continue, and even log/marker write failures are counted and logged rather than fatal.
+   That containment design has not run under a real Revit yet — your run is its first real
+   verification, so if the batch ever halts early, capture the Apex log and report it as a
+   harness bug, not a drawing problem.
 6. Collect and send back, unmodified:
    - `RUN_MATRIX.md` (per-drawing results + failure taxonomy + all-files success rate)
    - `batch-run.jsonl` (per-drawing debug records)
@@ -52,7 +56,10 @@ ship ledger marks HUMAN-VERIFY-REQUIRED. Send back the four artifacts in step 6.
 
 ## What "failed safely" looks like
 
-A failed drawing produces: a `quarantine\<file>.FAILED.txt` naming the failure class and the
-exact field or API error, a `batch-run.jsonl` line, no `.rfa` in `out\` for that drawing, and
-the batch continues to the next file. If you ever find a `.rfa` for a drawing whose matrix row
-says FAIL, that is a containment bug — report it with both files.
+A failed drawing produces: a `quarantine\<file>.FAILED.txt` naming the failure class, the
+exact field or API error, and the full exception detail (stack included), a `batch-run.jsonl`
+line, no `.rfa` in `out\` for that drawing, and the batch continues to the next file. Each run
+starts fresh: the jsonl is reset, stale quarantine markers are cleared, and each input's
+stale output is removed before it is processed — so every artifact you collect belongs to THIS
+run. If you ever find a `.rfa` for a drawing whose matrix row says FAIL, that is a containment
+bug — report it with both files.

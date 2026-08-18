@@ -14,7 +14,7 @@ here** (Linux container, no Revit — LEDGER Round 1). Therefore:
   customer drawings there is nothing to hold out. No holdout was simulated. The holdout
   procedure the operator must follow is in `OPERATOR_CHECKLIST.md` steps 4 and 8.
 
-## Executed here (live, deployed pipeline api v29 unless noted) — every attempt listed
+## Executed here — every attempt listed (deployed api version noted per row: rows 3 ran under v27, rows 4/6 under v28, rows 8–10 under v29; rows 1/2/7/11 are version-independent local/suite runs except row 7 which ran live under v28)
 
 | # | stage under test | input | result | evidence (LEDGER R3 / R2) |
 |---|---|---|---|---|
@@ -48,8 +48,16 @@ Success counts above are exhaustive over their input sets; no attempted input wa
   cannot be manufactured here.** Required: the drawings (see SHIP_READINESS #1, and the
   data-handling gate #11 BEFORE any real drawing is uploaded to the cloud pipeline).
 
-## Failure taxonomy (as implemented in the harness, counts from executable runs here)
+## Failure classes observed, attributed to the stage where they were actually observed
 
-BadInput (broken JSON/PDF): 2 observed (rows 6, 7) · SchemaViolation: 6 observed (row 2) ·
-Environment / RevitApi: 0 observable here (Revit absent — the classes exist in the harness
-and the operator kit exercises them) · Unknown: 0.
+Honest attribution (the adversarial review caught the first draft conflating stages):
+
+- **API stage, observed live**: BadInput ×2 (corrupted PDF at extraction, row 6; broken
+  correction body, row 7); SchemaViolation ×6-equivalent via the malformed fixtures at the
+  validate boundary (row 2).
+- **Batch harness itself**: its BadInput/SchemaViolation/Environment/RevitApi paths have NOT
+  executed anywhere — only the Revit-free slices are proven (classification mapping, the
+  validator the harness calls, marker naming, matrix math; rows 2 and 11). The harness's
+  end-to-end failure behavior is exactly what the operator's first run verifies
+  (OPERATOR_CHECKLIST "what failed safely looks like").
+- Unknown: 0 anywhere.

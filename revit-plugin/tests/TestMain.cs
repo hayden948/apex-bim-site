@@ -320,6 +320,28 @@ class TestMain
 
         AssertTrue(BatchRunReport.QuarantineMarkerName("x.pred.json") == "x.pred.json.FAILED.txt",
             "batch: quarantine marker never looks like a finished artifact");
+        string longName = new string('a', 250) + ".pred.json";
+        string marker = BatchRunReport.QuarantineMarkerName(longName);
+        AssertTrue(marker.Length < 130 && marker.EndsWith(".FAILED.txt"),
+            "batch: over-long input name yields a bounded marker name (no MAX_PATH abort)");
+        AssertTrue(marker == BatchRunReport.QuarantineMarkerName(longName),
+            "batch: truncated marker name is stable (hash, not random)");
+
+        // The harness's pre-Revit BadInput slice: corrupt .pred.json -> parse
+        // exception -> BadInput classification (the same sequence RunOne runs
+        // before any Revit call). The in-Revit remainder is HUMAN-VERIFY.
+        BatchRunReport.FailureClass corruptClass;
+        try
+        {
+            JsonDocument.Parse("{\"family_name\": \"broken\",");
+            corruptClass = BatchRunReport.FailureClass.None;
+        }
+        catch (Exception ex)
+        {
+            corruptClass = BatchRunReport.Classify(ex);
+        }
+        AssertTrue(corruptClass == BatchRunReport.FailureClass.BadInput,
+            "batch: corrupt .pred.json through the pre-Revit slice -> BadInput");
 
         var okRow = new BatchRunReport.Row
         {
