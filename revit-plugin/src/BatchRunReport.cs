@@ -49,6 +49,11 @@ public static class BatchRunReport
         /// <summary>Full exception detail incl. stack — jsonl + quarantine
         /// marker only, never the matrix.</summary>
         public string? Detail;
+        /// <summary>Customer-report fields (round 4): what the modeler calls the
+        /// thing, its box size, and which extracted values deserve a second look.</summary>
+        public string? EquipmentName;
+        public string? SizeSummary;
+        public string[] LowConfidenceFields = Array.Empty<string>();
     }
 
     /// <summary>Classify an exception into the taxonomy without referencing Revit types.</summary>
@@ -77,6 +82,7 @@ public static class BatchRunReport
         wall_ms = r.WallMs,
         rfa = r.RfaPath,
         detail = r.Detail,
+        low_confidence = r.LowConfidenceFields.Length == 0 ? null : r.LowConfidenceFields,
     });
 
     /// <summary>
@@ -132,6 +138,138 @@ public static class BatchRunReport
             "about unseen drawings.");
         return sb.ToString();
     }
+
+    /// <summary>
+    /// BUILD_REPORT.md — the artifact the CUSTOMER keeps next to the family
+    /// files (round 4, work item 4). Everything in it is written in the
+    /// modeler's language: equipment, drawing, family — no schema or pipeline
+    /// jargon, no stack traces (those live in the run log and quarantine
+    /// markers, which the failed items point at). It states, per item: what was
+    /// created, from which drawing file, at what size, how many values were
+    /// set, which build checks passed, and — honestly — which extracted values
+    /// carry low confidence and deserve a manual glance.
+    /// </summary>
+    public static string BuildCustomerReport(IReadOnlyList<Row> rows, string startedUtc, string? runLogPath)
+    {
+        int built = rows.Count(r => r.BuildOk);
+        int failed = rows.Count - built;
+        int review = rows.Count(r => r.BuildOk && (r.ValidateWarnings > 0 || r.LowConfidenceFields.Length > 0));
+
+        var sb = new StringBuilder();
+        sb.AppendLine("# Family build report");
+        sb.AppendLine();
+        sb.AppendLine($"Run started {startedUtc} UTC — Apex BIM Studio.");
+        sb.AppendLine();
+        sb.AppendLine($"**{built} of {rows.Count} drawings built into Revit families.** " +
+            (failed > 0 ? $"{failed} failed — each failed item below says what to do next. " : "") +
+            (review > 0 ? $"{review} built but list values worth double-checking before the families are used." : ""));
+        sb.AppendLine();
+        sb.AppendLine("Keep this file with the .rfa files: it records what was built, from which");
+        sb.AppendLine("drawing, and with which values, so the result can be defended without");
+        sb.AppendLine("reconstructing the run.");
+        sb.AppendLine();
+
+        foreach (Row r in rows)
+        {
+            string name = string.IsNullOrWhiteSpace(r.EquipmentName) ? r.File : r.EquipmentName!;
+            sb.AppendLine($"## {name}");
+            sb.AppendLine();
+            sb.AppendLine($"- Drawing file: `{r.File}`");
+            if (r.BuildOk)
+            {
+                sb.AppendLine($"- Result: **BUILT** → `{r.RfaPath}`");
+                if (!string.IsNullOrWhiteSpace(r.SizeSummary)) sb.AppendLine($"- Size: {r.SizeSummary}");
+                sb.AppendLine($"- Values set: {r.ParamsValued} of {r.ParamsAdded} parameters");
+                sb.AppendLine($"- Build checks: {FlexSummary(r)}");
+                if (r.LowConfidenceFields.Length > 0)
+                {
+                    sb.AppendLine($"- **Check these values** (the extraction was less than " +
+                        $"{(int)(100 * LowConfidenceNote)} percent sure): {string.Join(", ", r.LowConfidenceFields)}. " +
+                        "Open the drawing's spec in Review Submittal to confirm or correct them.");
+                }
+                if (r.ValidateWarnings > 0)
+                    sb.AppendLine($"- {r.ValidateWarnings} note(s) were logged for this drawing — see the run log.");
+            }
+            else
+            {
+                sb.AppendLine("- Result: **NOT BUILT** — no family file was produced for this drawing.");
+                sb.AppendLine($"- Why: {Plain(r)}");
+                sb.AppendLine($"- What to do: {NextStep(r.Failure)}");
+            }
+            sb.AppendLine();
+        }
+
+        sb.AppendLine("---");
+        sb.AppendLine();
+        sb.AppendLine(runLogPath != null
+            ? $"Full technical log for this run: `{runLogPath}` — if you contact support, send that one file."
+            : "The run log could not be created on this machine; the daily Apex log " +
+              @"(%LOCALAPPDATA%\Apex\logs) has this run's lines.");
+        return sb.ToString();
+    }
+
+    // Kept as a constant so the report text and SpecReviewModel.LowConfidenceThreshold
+    // can be asserted equal by the test suite rather than drifting silently.
+    public const double LowConfidenceNote = 0.8;
+
+    /// <summary>
+    /// Names of parameters whose extraction confidence is below the threshold —
+    /// the "check these values" list on the customer report. Reads the RAW
+    /// document so it works even when the build later fails.
+    /// </summary>
+    public static string[] CollectLowConfidence(JsonElement root, double threshold = LowConfidenceNote)
+    {
+        if (root.ValueKind != JsonValueKind.Object
+            || !root.TryGetProperty("parameters", out JsonElement pars)
+            || pars.ValueKind != JsonValueKind.Array)
+            return Array.Empty<string>();
+        var names = new List<string>();
+        foreach (JsonElement p in pars.EnumerateArray())
+        {
+            if (p.ValueKind != JsonValueKind.Object) continue;
+            if (!p.TryGetProperty("confidence", out JsonElement c)
+                || c.ValueKind != JsonValueKind.Number
+                || !c.TryGetDouble(out double conf) || conf >= threshold) continue;
+            names.Add(p.TryGetProperty("name", out JsonElement n) && n.ValueKind == JsonValueKind.String
+                ? n.GetString() ?? "(unnamed)" : "(unnamed)");
+        }
+        return names.ToArray();
+    }
+
+    private static string FlexSummary(Row r)
+    {
+        if (r.FlexWidth && r.FlexDepth && r.FlexHeight && r.Centered)
+            return "geometry resizes correctly on width, depth, and height, and stays centered — all passed";
+        var bad = new List<string>();
+        if (!r.FlexWidth) bad.Add("width resize");
+        if (!r.FlexDepth) bad.Add("depth resize");
+        if (!r.FlexHeight) bad.Add("height resize");
+        if (!r.Centered) bad.Add("centering");
+        return "FAILED: " + string.Join(", ", bad) +
+            " — the family was built but its geometry did not verify; treat it as suspect.";
+    }
+
+    private static string Plain(Row r)
+        => string.IsNullOrWhiteSpace(r.Error) ? "no further detail was captured" : r.Error!;
+
+    private static string NextStep(FailureClass f) => f switch
+    {
+        FailureClass.BadInput =>
+            "The drawing's spec file could not be read. Re-download or re-export it from the " +
+            "Apex portal; if it fails again, send the run log to support.",
+        FailureClass.SchemaViolation =>
+            "The spec is missing or has invalid fields (named above). Open it with Review " +
+            "Submittal, correct the named fields, and rebuild this one item.",
+        FailureClass.Environment =>
+            "This is a machine setup problem, not a drawing problem (the message above names " +
+            "it — usually Revit's family template folder). Fix the setting and run the batch " +
+            "again; already-built families are simply rebuilt.",
+        FailureClass.RevitApi =>
+            "Revit itself rejected the build. Rebuild just this item once; if it fails the " +
+            "same way, send the run log and the quarantine file to support.",
+        _ =>
+            "An unexpected error occurred. Send the run log and the quarantine file to support.",
+    };
 
     private static string YN(bool b) => b ? "y" : "n";
 

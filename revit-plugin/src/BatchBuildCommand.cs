@@ -43,8 +43,8 @@ public class BatchBuildCommand : IExternalCommand
         {
             var dlg = new OpenFileDialog
             {
-                Title = "Pick any .pred.json — its folder becomes the batch",
-                Filter = "Prediction JSON (*.pred.json)|*.pred.json|JSON files (*.json)|*.json",
+                Title = "Pick any equipment spec — every spec in its folder will be built",
+                Filter = "Extracted equipment specs (*.pred.json)|*.pred.json|JSON files (*.json)|*.json",
                 CheckFileExists = true,
             };
             if (dlg.ShowDialog() != true) return Result.Cancelled;
@@ -53,7 +53,7 @@ public class BatchBuildCommand : IExternalCommand
         if (string.IsNullOrWhiteSpace(batchDir) || !Directory.Exists(batchDir))
         {
             message = $"Batch folder not found: '{batchDir}'. Set APEX_BATCH_DIR or pick a file.";
-            if (!scripted) TaskDialog.Show("Apex Batch", message);
+            if (!scripted) TaskDialog.Show("Apex — Batch Build", message);
             return Result.Failed;
         }
 
@@ -62,10 +62,37 @@ public class BatchBuildCommand : IExternalCommand
             .ToArray();
         if (files.Length == 0)
         {
-            message = $"No .pred.json files in '{batchDir}'.";
-            if (!scripted) TaskDialog.Show("Apex Batch", message);
+            message = $"No equipment specs (*.pred.json) found in '{batchDir}'.";
+            if (!scripted) TaskDialog.Show("Apex — Batch Build", message);
             return Result.Failed;
         }
+
+        // Confirmable before anything is touched (round 4: every destructive
+        // action confirmable): the batch replaces earlier results for these
+        // drawings, and Revit stays busy until it finishes.
+        if (!scripted)
+        {
+            var confirm = new TaskDialog("Apex — Batch Build")
+            {
+                MainInstruction = $"Build {files.Length} equipment famil{(files.Length == 1 ? "y" : "ies")}?",
+                MainContent =
+                    $"Folder: {batchDir}\n\n" +
+                    "• Families are written to the 'out' folder; earlier results for these " +
+                    "drawings are replaced.\n" +
+                    "• One bad drawing never stops the rest — failures are listed in the build " +
+                    "report with what to do next.\n" +
+                    "• Revit will be busy until the batch finishes; a progress window shows " +
+                    "each drawing as it completes.",
+                CommonButtons = TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No,
+                DefaultButton = TaskDialogResult.No,
+            };
+            if (confirm.Show() != TaskDialogResult.Yes) return Result.Cancelled;
+        }
+
+        // One log file per run (round 4, work item 5): everything this batch
+        // does lands in its own timestamped file, so support is "send me that
+        // one file". The daily rolling log still receives every line.
+        using ApexLog.RunScope run = ApexLog.BeginRun("batch-build");
 
         string outDir = Path.Combine(batchDir!, "out");
         string quarantineDir = Path.Combine(batchDir!, "quarantine");
@@ -73,6 +100,7 @@ public class BatchBuildCommand : IExternalCommand
         Directory.CreateDirectory(quarantineDir);
         string jsonlPath = Path.Combine(batchDir!, "batch-run.jsonl");
         string startedUtc = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss");
+        ApexLog.Info($"Batch build: {files.Length} spec(s) in {batchDir} (scripted={scripted}).");
 
         // Fresh-run semantics (adversarial finding 3): this run's records only —
         // no mixed logs, no stale markers, no stale outputs from earlier runs
@@ -93,11 +121,42 @@ public class BatchBuildCommand : IExternalCommand
             ApexLog.Warn("Batch pre-run cleanup failed (continuing): " + ex.Message);
         }
 
+        // Per-item progress (round 4, work item 2). All Revit API work stays on
+        // this (the API) thread; the window is repainted between per-item
+        // transactions by a Render-priority dispatcher pump — honest status
+        // without input re-entrancy. Scripted runs stay headless.
+        BatchProgressWindow? progress = null;
+        if (!scripted)
+        {
+            try
+            {
+                IntPtr owner = IntPtr.Zero;
+                try { owner = commandData.Application.MainWindowHandle; } catch { }
+                progress = new BatchProgressWindow(files.Length, batchDir!, owner);
+                progress.Show();
+                BatchProgressWindow.Pump();
+            }
+            catch (Exception ex)
+            {
+                // The batch must run even if the progress UI cannot.
+                ApexLog.Warn("Progress window unavailable (continuing headless): " + ex.Message);
+                progress = null;
+            }
+        }
+
         var rows = new List<BatchRunReport.Row>();
+        int index = 0;
         foreach (string file in files)
         {
+            index++;
+            try { progress?.Starting(index, Path.GetFileName(file)); }
+            catch (Exception ex) { ApexLog.Warn("Progress update failed (continuing): " + ex.Message); }
+
             BatchRunReport.Row row = RunOne(app, file, outDir);
             rows.Add(row);
+
+            try { progress?.Finished(row, index); }
+            catch (Exception ex) { ApexLog.Warn("Progress update failed (continuing): " + ex.Message); }
             // Bookkeeping must never kill the batch (adversarial finding 2):
             // a locked jsonl or an unwritable marker is logged and counted,
             // and the run continues.
@@ -141,12 +200,50 @@ public class BatchBuildCommand : IExternalCommand
             ApexLog.Error("RUN_MATRIX.md write failed.", ex);
         }
 
+        // The report the CUSTOMER keeps, next to the .rfa files (round 4,
+        // work item 4) — customer language, per-item results, what to do next.
+        string reportPath = Path.Combine(outDir, "BUILD_REPORT.md");
+        try
+        {
+            File.WriteAllText(reportPath, BatchRunReport.BuildCustomerReport(rows, startedUtc, run.Path));
+        }
+        catch (Exception ex)
+        {
+            bookkeepingErrors++;
+            ApexLog.Error("BUILD_REPORT.md write failed.", ex);
+        }
+
         int ok = rows.Count(r => r.BuildOk);
-        string summary = $"Batch complete: {ok}/{rows.Count} built. " +
-            $"Matrix: {Path.Combine(batchDir!, "RUN_MATRIX.md")}; failures quarantined under {quarantineDir}." +
+        int failedCount = rows.Count - ok;
+        int review = rows.Count(r => r.BuildOk && (r.ValidateWarnings > 0 || r.LowConfidenceFields.Length > 0));
+        string summary = $"Batch complete: {ok}/{rows.Count} built, {failedCount} failed, {review} built-but-check-values. " +
+            $"Report: {reportPath}; matrix: {Path.Combine(batchDir!, "RUN_MATRIX.md")}; " +
+            $"failures quarantined under {quarantineDir}." +
             (bookkeepingErrors > 0 ? $" WARNING: {bookkeepingErrors} bookkeeping write(s) failed — see the Apex log." : "");
         ApexLog.Info(summary);
-        if (!scripted) TaskDialog.Show("Apex Batch", summary);
+
+        try { progress?.Close(); }
+        catch (Exception ex) { ApexLog.Warn("Progress window close failed: " + ex.Message); }
+
+        if (!scripted)
+        {
+            var done = new TaskDialog("Apex — Batch Build finished")
+            {
+                MainInstruction = $"{ok} of {rows.Count} famil{(rows.Count == 1 ? "y" : "ies")} built" +
+                    (failedCount > 0 ? $" — {failedCount} failed" : "") +
+                    (review > 0 ? $" — {review} built but list values to double-check" : ""),
+                MainContent =
+                    $"Families and the build report are in:\n{outDir}\n\n" +
+                    "BUILD_REPORT.md lists every drawing: what was built with which values, " +
+                    "what failed, and what to do about each failure.\n\n" +
+                    $"Log for this run: {run.Path ?? "(see the daily Apex log)"}" +
+                    (bookkeepingErrors > 0
+                        ? $"\n\nWARNING: {bookkeepingErrors} bookkeeping write(s) failed — the log has details."
+                        : ""),
+                CommonButtons = TaskDialogCommonButtons.Close,
+            };
+            done.Show();
+        }
         // Scripted runs read the exit state from RUN_MATRIX.md / jsonl, not a dialog.
         return Result.Succeeded;
     }
@@ -180,6 +277,16 @@ public class BatchBuildCommand : IExternalCommand
             string text = File.ReadAllText(file);
             using JsonDocument doc = JsonDocument.Parse(text);
 
+            // Customer-report context, captured from the RAW document so a
+            // drawing that later fails still gets a recognizable report entry.
+            if (doc.RootElement.ValueKind == JsonValueKind.Object)
+            {
+                if (doc.RootElement.TryGetProperty("family_name", out JsonElement fn)
+                    && fn.ValueKind == JsonValueKind.String)
+                    row.EquipmentName = fn.GetString();
+                row.LowConfidenceFields = BatchRunReport.CollectLowConfidence(doc.RootElement);
+            }
+
             PredValidator.Result check = PredValidator.Validate(doc.RootElement, row.File);
             row.ValidateWarnings = check.Warnings.Count;
             foreach (string w in check.Warnings) ApexLog.Warn(w);
@@ -198,6 +305,7 @@ public class BatchBuildCommand : IExternalCommand
                 NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString,
             };
             PredFamily pred = JsonSerializer.Deserialize<PredFamily>(text, opts)!;
+            row.SizeSummary = SizeOf(pred.Geometry);
 
             string? templatePath = BuildFromPredJsonCommand.ResolveTemplate(app, pred.FamilyTemplate);
             if (templatePath == null)
@@ -237,5 +345,14 @@ public class BatchBuildCommand : IExternalCommand
             row.WallMs = sw.ElapsedMilliseconds;
         }
         return row;
+    }
+
+    private static string? SizeOf(PredGeometry? g)
+    {
+        if (g?.Width == null || g.Depth == null || g.Height == null) return null;
+        string Dim(PredDim d) =>
+            d.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) +
+            (string.IsNullOrWhiteSpace(d.Unit) ? " in" : " " + d.Unit);
+        return $"{Dim(g.Width)} W × {Dim(g.Depth)} D × {Dim(g.Height)} H";
     }
 }

@@ -43,7 +43,7 @@ if ($Journal) {
     Write-Host "Replaying journal $run"
     Start-Process -FilePath $revit -ArgumentList "`"$run`"" -Wait
 } else {
-    Write-Host "Starting Revit. Click: Apex BIM Studio -> M1 -> Batch Build (one click; the rest is unattended)."
+    Write-Host "Starting Revit. Click: Apex BIM Studio -> Submittals -> Batch Build (one click; the rest is unattended)."
     Start-Process -FilePath $revit -Wait
 }
 

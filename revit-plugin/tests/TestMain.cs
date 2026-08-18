@@ -167,6 +167,9 @@ class TestMain
         RunSchemaContractTest();
         RunFixtureTests();
         RunBatchReportTests();
+        RunSpecReviewTests();
+        RunCustomerReportTests();
+        RunRunLogTests();
 
         Console.WriteLine(_failures == 0 ? "\nALL TESTS PASSED" : $"\n{_failures} FAILURES");
         return _failures == 0 ? 0 : 1;
@@ -421,5 +424,198 @@ class TestMain
             malformed++;
         }
         AssertTrue(malformed >= 4, $"malformed fixture count >= 4 (got {malformed})");
+    }
+
+    // ---------- Round 4: spec review / override core ----------
+
+    static void RunSpecReviewTests()
+    {
+        string tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "apex-review-tests");
+        System.IO.Directory.CreateDirectory(tmp);
+        foreach (string stale in System.IO.Directory.GetFiles(tmp)) System.IO.File.Delete(stale);
+
+        // The round-3-class parser miss: a dimension extracted as 0 with a
+        // low-confidence Dimensions parameter. The validator must reject it,
+        // the override must fix exactly that field, and the save must keep the
+        // extraction as delivered in the .bak.
+        string missPath = System.IO.Path.Combine(tmp, "panel-miss.pred.json");
+        string missJson = @"{
+  ""schema_version"": ""1.0"",
+  ""family_name"": ""Panelboard With A Missed Depth"",
+  ""category"": ""Electrical Equipment"",
+  ""geometry"": {
+    ""primitive"": ""box"",
+    ""width"": { ""value"": 20, ""unit"": ""in"" },
+    ""depth"": { ""value"": 0, ""unit"": ""in"" },
+    ""height"": { ""value"": 32, ""unit"": ""in"" }
+  },
+  ""parameters"": [
+    { ""name"": ""Depth"", ""spec_type"": ""Length"", ""group"": ""Dimensions"",
+      ""is_instance"": false, ""value"": ""0"", ""units"": ""in"", ""confidence"": 0.31 },
+    { ""name"": ""Manufacturer"", ""spec_type"": ""Text"", ""group"": ""Identity Data"",
+      ""is_instance"": false, ""value"": ""Square D"", ""confidence"": 0.97 }
+  ]
+}";
+        System.IO.File.WriteAllText(missPath, missJson);
+
+        var model = SpecReviewModel.Load(missPath);
+        AssertTrue(model.LoadError == null, "review: parser-miss file loads");
+        var before = model.Validate();
+        AssertTrue(!before.IsValid, "review: zero depth is rejected before the override");
+        AssertTrue(before.Errors.Any(e => e.Contains("geometry.depth.value")),
+            "review: rejection names geometry.depth.value");
+
+        var fields = model.BuildFields();
+        var depthField = fields.First(f => f.Key == "geometry.depth");
+        AssertTrue(depthField.Confidence.HasValue && depthField.LowConfidence,
+            "review: depth row borrows the Dimensions parameter's low confidence");
+        AssertTrue(model.LowConfidenceCount() >= 2,
+            "review: low-confidence values counted for the header (dim row + param row)");
+
+        AssertTrue(model.TrySave() != null, "review: save refuses an invalid spec");
+        AssertTrue(model.TrySet("geometry.depth", "not-a-number") != null,
+            "review: non-numeric dimension edit rejected with a message");
+        AssertTrue(model.TrySet("geometry.depth.unit", "furlong") != null,
+            "review: unknown unit rejected");
+        AssertTrue(model.TrySet("family_name", "") != null, "review: empty equipment name rejected");
+        AssertTrue(model.TrySet("geometry.depth", "5.75") == null, "review: numeric fix accepted");
+        AssertTrue(model.TrySet("parameters[0].value", "5.75") == null, "review: parameter fix accepted");
+        var after = model.Validate();
+        AssertTrue(after.IsValid, "review: corrected spec validates"
+            + (after.IsValid ? "" : " :: " + string.Join(" | ", after.Errors)));
+
+        AssertTrue(model.TrySave() == null, "review: corrected spec saves");
+        AssertTrue(System.IO.File.ReadAllText(missPath + ".bak") == missJson,
+            "review: .bak preserves the extraction as delivered");
+
+        var reload = SpecReviewModel.Load(missPath);
+        var d2 = reload.BuildFields().First(f => f.Key == "geometry.depth");
+        AssertTrue(d2.Value == "5.75" && reload.Validate().IsValid,
+            "review: saved correction round-trips");
+        AssertTrue(reload.TrySet("geometry.depth", "6") == null && reload.TrySave() == null
+            && System.IO.File.ReadAllText(missPath + ".bak") == missJson,
+            "review: later saves never overwrite the as-delivered .bak");
+
+        // Value-kind preservation: numbers stay numbers, text stays text.
+        string kindPath = System.IO.Path.Combine(tmp, "kinds.pred.json");
+        System.IO.File.WriteAllText(kindPath, @"{
+  ""schema_version"": ""1.0"", ""family_name"": ""K"", ""category"": ""Electrical Equipment"",
+  ""geometry"": { ""primitive"": ""box"",
+    ""width"": { ""value"": 1, ""unit"": ""in"" }, ""depth"": { ""value"": 1, ""unit"": ""in"" },
+    ""height"": { ""value"": 1, ""unit"": ""in"" } },
+  ""parameters"": [
+    { ""name"": ""Frequency"", ""spec_type"": ""Number"", ""group"": ""Electrical"",
+      ""is_instance"": false, ""value"": 60 } ]
+}");
+        var kinds = SpecReviewModel.Load(kindPath);
+        AssertTrue(kinds.TrySet("parameters[0].value", "50") == null, "review: numeric param edit accepted");
+        AssertTrue(kinds.ToJson().Contains("\"value\": 50"),
+            "review: numeric JSON kind preserved (not turned into a string)");
+        AssertTrue(kinds.TrySet("parameters[0].value", "fifty") != null,
+            "review: non-numeric edit of a numeric param rejected");
+
+        string badPath = System.IO.Path.Combine(tmp, "broken.pred.json");
+        System.IO.File.WriteAllText(badPath, "{ definitely not json");
+        AssertTrue(SpecReviewModel.Load(badPath).LoadError != null, "review: unreadable file -> LoadError, no throw");
+
+        string? goldenDir = FindRepoFile(System.IO.Path.Combine("schemas", "familyspec", "fixtures", "golden"));
+        AssertTrue(goldenDir != null, "review: golden fixture dir located");
+        if (goldenDir != null)
+        {
+            var g = SpecReviewModel.Load(System.IO.Path.Combine(goldenDir, "nq430-panelboard.pred.json"));
+            AssertTrue(g.LoadError == null && g.Validate().IsValid, "review: golden fixture loads and validates");
+            AssertTrue(g.LowConfidenceCount() == 0, "review: golden fixture has no low-confidence flags");
+            AssertTrue(g.BuildFields().Count(f => f.Editable) > 15, "review: golden fixture exposes editable fields");
+            AssertTrue(g.ExtractionWarnings.Count == 7, "review: extraction's own warnings surfaced");
+        }
+    }
+
+    // ---------- Round 4: customer build report ----------
+
+    static void RunCustomerReportTests()
+    {
+        AssertTrue(BatchRunReport.LowConfidenceNote == SpecReviewModel.LowConfidenceThreshold,
+            "report: low-confidence threshold shared with the review model (no silent drift)");
+
+        using var lc = JsonDocument.Parse(@"{""parameters"":[
+            {""name"":""Depth"",""confidence"":0.31},
+            {""name"":""Manufacturer"",""confidence"":0.97},
+            {""name"":""NoConfidence""}]}");
+        string[] flagged = BatchRunReport.CollectLowConfidence(lc.RootElement);
+        AssertTrue(flagged.Length == 1 && flagged[0] == "Depth",
+            "report: CollectLowConfidence flags only the sub-threshold parameter");
+
+        var okRow = new BatchRunReport.Row
+        {
+            File = "a.pred.json", ValidateOk = true, BuildOk = true,
+            ParamsAdded = 18, ParamsValued = 18,
+            FlexWidth = true, FlexDepth = true, FlexHeight = true, Centered = true,
+            WallMs = 1200, RfaPath = "out/a.rfa",
+            EquipmentName = "Square D NQ430 Panelboard",
+            SizeSummary = "20 in W × 5.75 in D × 32 in H",
+            LowConfidenceFields = new[] { "Depth" },
+        };
+        var failRow = new BatchRunReport.Row
+        {
+            File = "b.pred.json", ValidateOk = false,
+            Failure = BatchRunReport.FailureClass.SchemaViolation,
+            Error = "b.pred.json: geometry.depth.value must be a number > 0 (got 0).",
+            EquipmentName = "Transformer T-9",
+        };
+        var envRow = new BatchRunReport.Row
+        {
+            File = "c.pred.json", ValidateOk = true,
+            Failure = BatchRunReport.FailureClass.Environment,
+            Error = "Family template not found (looked for 'default').",
+        };
+
+        string rep = BatchRunReport.BuildCustomerReport(
+            new[] { okRow, failRow, envRow }, "2026-08-18 20:00:00", "C:\\logs\\run-x.log");
+        AssertTrue(rep.Contains("1 of 3"), "report: headline counts built over ALL drawings");
+        AssertTrue(rep.Contains("Square D NQ430 Panelboard") && rep.Contains("Transformer T-9"),
+            "report: items titled by equipment name");
+        AssertTrue(rep.Contains("out/a.rfa") && rep.Contains("20 in W"),
+            "report: built item lists its family file and size");
+        AssertTrue(rep.Contains("Check these values") && rep.Contains("Depth")
+            && rep.Contains("80 percent"),
+            "report: low-confidence values surfaced by name with the threshold");
+        AssertTrue(rep.Contains("NOT BUILT") && rep.Contains("Review"),
+            "report: failed item says NOT BUILT and points at the review path");
+        AssertTrue(rep.Contains("machine setup problem"),
+            "report: environment failure blamed on the machine, not the drawing");
+        AssertTrue(rep.Contains("run-x.log"), "report: run log named in the footer");
+        AssertTrue(!rep.Contains("SchemaViolation") && !rep.Contains("stack"),
+            "report: no taxonomy jargon or stack traces in the customer report");
+
+        string jsonl = BatchRunReport.ToJsonLine(okRow);
+        using var line = JsonDocument.Parse(jsonl);
+        AssertTrue(line.RootElement.GetProperty("low_confidence")[0].GetString() == "Depth",
+            "report: jsonl carries the low-confidence field names");
+
+        // All-failed batch: headline still honest, no divide-by-zero.
+        string repFail = BatchRunReport.BuildCustomerReport(new[] { failRow }, "t", null);
+        AssertTrue(repFail.Contains("0 of 1"), "report: all-failed batch reports 0 built");
+        AssertTrue(repFail.Contains("daily Apex log"), "report: missing run log handled in the footer");
+    }
+
+    // ---------- Round 4: one log file per run ----------
+
+    static void RunRunLogTests()
+    {
+        ApexLog.RunScope run = ApexLog.BeginRun("test run:with/bad*chars");
+        string? p = run.Path;
+        AssertTrue(p != null, "runlog: per-run file created");
+        if (p == null) { run.Dispose(); return; }
+        AssertTrue(System.IO.Path.GetFileName(p).StartsWith("run-"),
+            "runlog: run file named run-<timestamp>-<name>");
+        ApexLog.Info("runlog probe line");
+        AssertTrue(System.IO.File.ReadAllText(p).Contains("runlog probe line"),
+            "runlog: line lands in the per-run file");
+        run.Dispose();
+        AssertTrue(System.IO.File.ReadAllText(p).Contains("Run log closed."),
+            "runlog: dispose writes the closing line");
+        ApexLog.Info("runlog stray line");
+        AssertTrue(!System.IO.File.ReadAllText(p).Contains("runlog stray line"),
+            "runlog: nothing lands in the run file after the run ends");
     }
 }

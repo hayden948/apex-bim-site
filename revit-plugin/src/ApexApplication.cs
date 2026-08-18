@@ -35,33 +35,39 @@ public class ApexApplication : IExternalApplication
 
             RibbonPanel account = Panel(app, "Account");
             AddButton(account, asm, "ApexSettings", "Settings", typeof(SettingsCommand),
-                "Set the Apex API URL and service token for this workstation");
+                "Connect this workstation to your Apex project (server address and access token)");
             AddButton(account, asm, "ApexSignIn", "Sign In", typeof(SignInCommand),
-                "Sign in to Apex (OAuth PKCE)");
+                "Sign in to your Apex account");
             AddButton(account, asm, "ApexSync", "Sync", typeof(SyncCommand),
-                "Sync the cloud AFIS library and choose the active family");
+                "Get your project's equipment library from Apex and choose the active family");
 
             RibbonPanel gen = Panel(app, "Generate");
             if (ShowPrototypes)
                 AddButton(gen, asm, "ApexGenSubmittal", "From Submittal", typeof(GenerateFromSubmittalCommand),
                     "Generate a family from a PDF submittal");
             AddButton(gen, asm, "ApexGenLibrary", "From Library", typeof(GenerateFromLibraryCommand),
-                "Build the active Apex library family and place it (project) or build into the open family (Family Editor)");
+                "Build the active library family and place it (project) or build into the open family (Family Editor)");
             AddButton(gen, asm, "ApexProcessQueue", "Process Queue", typeof(ProcessQueueCommand),
-                "Build queued RFA-generation jobs from the Apex cloud queue into .rfa files");
+                "Build the families your Apex project has queued for this workstation");
             AddButton(gen, asm, "ApexAutoProcess", "Auto Process", typeof(AutoProcessCommand),
-                "Toggle the background worker: while Revit is open, drain the RFA queue automatically every few minutes");
+                "While Revit is open, automatically build queued families every few minutes (toggle)");
 
             // The autonomous worker: while this Revit session idles, drain the
             // cloud queue on a timer (config.auto_process_minutes; 0 = off).
             app.Idling += AutoProcessLoop.OnIdling;
 
-            RibbonPanel m1 = Panel(app, "M1");
-            AddButton(m1, asm, "ApexBuildFromJson", "Build from JSON", typeof(BuildFromPredJsonCommand),
-                "Build a family (.rfa) from a local .pred.json extraction");
-            AddButton(m1, asm, "ApexBatchBuild", "Batch Build", typeof(BatchBuildCommand),
-                "Build every .pred.json in a folder with per-drawing isolation, quarantine, and a run matrix " +
-                "(scriptable via APEX_BATCH_DIR)");
+            // Round 4: the panel a first-time CVE modeler works from, in their
+            // order of use — review what was extracted, build one, build all.
+            RibbonPanel build = Panel(app, "Submittals");
+            AddButton(build, asm, "ApexReviewSubmittal", "Review Submittal", typeof(ReviewSubmittalCommand),
+                "Check the values Apex extracted from a submittal before building — every value is shown " +
+                "with how sure the extraction was; correct any field and build that one family");
+            AddButton(build, asm, "ApexBuildFromJson", "Build Family", typeof(BuildFromPredJsonCommand),
+                "Build one Revit family from an extracted equipment spec (the .pred.json file that " +
+                "came with the submittal)");
+            AddButton(build, asm, "ApexBatchBuild", "Batch Build", typeof(BatchBuildCommand),
+                "Build every equipment spec in a folder into families. One bad drawing never stops the " +
+                "rest; a build report next to the families says what was built, what failed, and what to do");
 
             RibbonPanel fam = Panel(app, "Families");
             if (ShowPrototypes)
@@ -72,9 +78,10 @@ public class ApexApplication : IExternalApplication
 
             RibbonPanel validate = Panel(app, "Validate");
             AddButton(validate, asm, "ApexQa", "Run QA", typeof(RunQaCommand),
-                "Run the Apex QA Engine: local checks in the Family Editor, cloud QA otherwise (Doc 8)");
+                "Check a family against the Apex quality rules (geometry, parameters, identity) — " +
+                "local checks in the Family Editor, cloud checks otherwise");
             AddButton(validate, asm, "ApexClearance", "Verify Clearances", typeof(VerifyClearancesCommand),
-                "Clash-check AFIS clearance zones");
+                "Clash-check the working clearance zones of placed equipment");
 
             RibbonPanel layout = Panel(app, "Layout & Survey");
             if (ShowPrototypes)

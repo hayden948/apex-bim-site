@@ -104,14 +104,16 @@ public class BuildFromPredJsonCommand : IExternalCommand
 
         var dlg = new OpenFileDialog
         {
-            Title = "Select a .pred.json extraction",
-            Filter = "Prediction JSON (*.pred.json)|*.pred.json|JSON files (*.json)|*.json|All files (*.*)|*.*",
+            Title = "Select an extracted equipment spec to build",
+            Filter = "Extracted equipment spec (*.pred.json)|*.pred.json|JSON files (*.json)|*.json|All files (*.*)|*.*",
             CheckFileExists = true,
         };
         if (dlg.ShowDialog() != true) return Result.Cancelled;
 
         string inputPath = dlg.FileName;
         string fileLabel = Path.GetFileName(inputPath);
+        using ApexLog.RunScope run = ApexLog.BeginRun("build-" +
+            (fileLabel.Length > 30 ? fileLabel.Substring(0, 30) : fileLabel));
         PredFamily pred;
         PredValidator.Result check;
         try
@@ -128,8 +130,9 @@ public class BuildFromPredJsonCommand : IExternalCommand
                 string detail = string.Join("\n", check.Errors.Take(12))
                     + (check.Errors.Count > 12 ? $"\n…and {check.Errors.Count - 12} more." : "");
                 ApexLog.Warn($"FamilySpec validation failed for {fileLabel}:\n{detail}");
-                message = $"This file is not a valid FamilySpec v{PredValidator.Version}:\n\n{detail}";
-                TaskDialog.Show("Apex — invalid .pred.json", message);
+                message = $"This spec has problems that must be fixed before building:\n\n{detail}\n\n" +
+                    "Open it with Review Submittal to correct the named fields, then build again.";
+                TaskDialog.Show("Apex — this spec has problems", message);
                 return Result.Failed;
             }
             foreach (string w in check.Warnings) ApexLog.Warn(w);
@@ -145,15 +148,16 @@ public class BuildFromPredJsonCommand : IExternalCommand
         catch (JsonException ex)
         {
             ApexLog.Error("Could not parse .pred.json.", ex);
-            message = $"{fileLabel} is not valid JSON: {ex.Message}";
-            TaskDialog.Show("Apex — invalid .pred.json", message);
+            message = $"{fileLabel} could not be read as an equipment spec: {ex.Message}\n\n" +
+                "Re-download it from the Apex portal; if it fails again, send the run log to support.";
+            TaskDialog.Show("Apex — cannot read this file", message);
             return Result.Failed;
         }
         catch (Exception ex)
         {
             ApexLog.Error("Could not read .pred.json.", ex);
-            message = "Could not read .pred.json: " + ex.Message;
-            TaskDialog.Show("Apex M1", message);
+            message = "Could not read the spec file: " + ex.Message;
+            TaskDialog.Show("Apex — Build Family", message);
             return Result.Failed;
         }
 
@@ -161,18 +165,19 @@ public class BuildFromPredJsonCommand : IExternalCommand
         {
             // Unreachable after validation; keeps the null-flow explicit.
             message = $"{fileLabel}: geometry is required.";
-            TaskDialog.Show("Apex — invalid .pred.json", message);
+            TaskDialog.Show("Apex — this spec has problems", message);
             return Result.Failed;
         }
 
         string? templatePath = ResolveTemplate(app, pred.FamilyTemplate);
         if (templatePath == null || !File.Exists(templatePath))
         {
-            message = "Family template not found.\n\nSearched the Revit family template folder ("
+            message = "Family template not found — this is a machine setting, not a drawing problem." +
+                "\n\nSearched the Revit family template folder ("
                 + (app.FamilyTemplatePath ?? "not configured")
                 + ") for '" + (pred.FamilyTemplate ?? DefaultTemplateFileName)
-                + "'.\n\nAdjust Revit's Family Template File location or the .pred.json family_template.";
-            TaskDialog.Show("Apex M1", message);
+                + "'.\n\nSet Revit's Family Template File location (Options → File Locations), then build again.";
+            TaskDialog.Show("Apex — cannot build on this machine", message);
             return Result.Failed;
         }
 
@@ -181,24 +186,42 @@ public class BuildFromPredJsonCommand : IExternalCommand
             string outputPath = Path.Combine(
                 Path.GetDirectoryName(inputPath) ?? ".",
                 SafeFileName(pred.FamilyName, Path.GetFileNameWithoutExtension(inputPath)) + ".rfa");
+
+            // Round 4: replacing an existing family file is confirmable.
+            if (File.Exists(outputPath))
+            {
+                var confirm = new TaskDialog("Apex — Build Family")
+                {
+                    MainInstruction = "Replace the existing family file?",
+                    MainContent = $"{outputPath}\n\nalready exists and will be replaced by this build.",
+                    CommonButtons = TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No,
+                    DefaultButton = TaskDialogResult.No,
+                };
+                if (confirm.Show() != TaskDialogResult.Yes) return Result.Cancelled;
+            }
+
             BuildOutcome outcome = BuildToFile(app, pred, templatePath, outputPath);
             ApexLog.Info("Generated family: " + outcome.OutputPath);
 
             var sb = new StringBuilder()
-                .AppendLine("Family generated.")
+                .AppendLine("Family built.")
                 .AppendLine()
                 .AppendLine($"Output: {outcome.OutputPath}")
                 .AppendLine($"Size (in): {Fmt(pred.Geometry.Width)} W × {Fmt(pred.Geometry.Depth)} D × {Fmt(pred.Geometry.Height)} H")
                 .AppendLine($"Parameters added: {outcome.ParamsAdded} of {outcome.ParamsTotal} (values set on {outcome.ParamsValued})")
-                .AppendLine($"Flexed: Width={YN(outcome.Flex.Width)}  Depth={YN(outcome.Flex.Depth)}  Height={YN(outcome.Flex.Height)}  (centered: {YN(outcome.Flex.Centered)})");
-            TaskDialog.Show("Apex M2", sb.ToString());
+                .AppendLine($"Geometry checks: width resize {YN(outcome.Flex.Width)}, depth resize {YN(outcome.Flex.Depth)}, " +
+                    $"height resize {YN(outcome.Flex.Height)}, centered {YN(outcome.Flex.Centered)}")
+                .AppendLine()
+                .AppendLine($"Run log: {run.Path ?? "(daily Apex log)"}");
+            TaskDialog.Show("Apex — family built", sb.ToString());
             return Result.Succeeded;
         }
         catch (Exception ex)
         {
             ApexLog.Error("Family generation failed.", ex);
-            message = "Family generation failed: " + ex.Message;
-            TaskDialog.Show("Apex M1", message);
+            message = "The build failed: " + ex.Message +
+                $"\n\nNo family file was left behind. Run log: {run.Path ?? "(daily Apex log)"}";
+            TaskDialog.Show("Apex — build failed", message);
             return Result.Failed;
         }
     }

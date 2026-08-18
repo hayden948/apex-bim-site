@@ -9,7 +9,8 @@ ship ledger marks HUMAN-VERIFY-REQUIRED. Send back the four artifacts in step 6.
 1. Build or copy the plugin (`ApexBimStudio.dll` for your Revit's target: net48 = 2022–2024,
    net8 = 2025+) and the `.addin` manifest into
    `%APPDATA%\Autodesk\Revit\Addins\<version>\` (see `revit-plugin/deploy/`).
-2. Start Revit once; confirm the **Apex BIM Studio** tab shows **M1 → Batch Build**.
+2. Start Revit once; confirm the **Apex BIM Studio** tab shows **Submittals → Batch Build**
+   (rounds ≤3 built this panel as "M1"; round 4 renamed it).
 3. Confirm Revit's Family Template File location is set (Options → File Locations) and the
    Electrical Equipment template exists there — the batch classifies a missing template as an
    `Environment` failure for every file, which tells you about the machine, not the drawings.
