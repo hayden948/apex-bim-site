@@ -945,3 +945,83 @@ RUN_MATRIX.md, quarantine markers). Every checkbox is HUMAN-VERIFY-REQUIRED.
 V2 launched: ship-reviewer charged as a hostile first-time CVE modeler walking load → select →
 review → build → read report, given ONLY the brief's criteria + the artifacts (code, walkthrough,
 sample report, tests) — no author conclusions.
+
+### Cycle 4 (T0+45 → T0+55) — V2 verdict: REFUTED; all findings fixed or dispositioned
+
+V2 (ship-reviewer, hostile first-time CVE modeler, given only criteria + artifacts) returned
+**REFUTED** with 10 findings. This is the third round in a row where V1+V3 passed and V2 found
+real defects — the design works. Verbatim core of the verdict: "the round's own walkthrough
+input set produces 'geometry did not verify — treat it as suspect' on five of the six golden
+drawings…, the sample report fabricates 'all passed' for rows that cannot pass, and the first
+click of the walkthrough is on a ribbon button that is disabled at Revit's zero-document start
+screen."
+
+Disposition, finding by finding (fixes in commits 54e064b + follow-up label commit):
+
+1. **Flex checks fail on 5/6 goldens; sample fabricated "all passed" — CONFIRMED, FIXED.**
+   Root cause: labeled dimensions need family parameters named Apex_Width/Depth/Height that
+   most specs don't carry. `EnsureDimensionParameters` now creates+values them from the
+   geometry inside the build transaction (builder behavior — NOT a schema change), so the
+   parametric-box promise no longer depends on the extraction's parameter list. Built-but-
+   suspect rows now carry a What-to-do line. The committed sample was regenerated from rows
+   mirroring the 8-file walkthrough under a loud "ILLUSTRATIVE — synthetic results, no Revit
+   ran" banner. Whether the auto-created parameters actually flex is in-Revit truth:
+   walkthrough step 6 now records any FAILED checks instead of promising none.
+2. **Dead first click at the start screen — CONFIRMED (standard Revit behavior), FIXED.**
+   `CommandAlwaysAvailable` (IExternalCommandAvailability) registered on the three Submittals
+   buttons; walkthrough step 1 now explicitly verifies clickability at zero documents and
+   calls a grey button ship-blocking. Operator checklist claim corrected to "v0.4.0+".
+3. **Containment deleted pre-existing families; review build unconfirmed — CONFIRMED, FIXED.**
+   `BuildToFile` deletes the output ONLY after an attempted save (`attemptedSave` guard);
+   review Save-and-Build got a Yes/No overwrite confirmation (default No); the failure dialog
+   now says "No NEW family file was written", which is what is true.
+4. **Override output landed outside out\ and the kept report went stale — CONFIRMED, FIXED.**
+   Review rebuilds now write to out\ with the input-stem name (same collision-proof rule as
+   the batch) and append a dated UPDATE line to out\BUILD_REPORT.md superseding the stale row.
+5. **Suspect families read as plain success — CONFIRMED, FIXED.** One shared predicate
+   (`BatchRunReport.NeedsReview`, tested) now drives the report headline, the progress ⚠, and
+   the summary count; failed geometry checks can no longer hide inside "✓ built".
+6. **Confidence-borrow missed Apex_ names; two rows both called "Depth"; half-fix trap —
+   CONFIRMED, FIXED (with one accepted residual).** Name matching strips the Apex_ prefix
+   (tested); geometry rows are labeled "Overall width/depth/height"; new
+   `ConsistencyWarnings()` names a geometry-vs-parameter disagreement after a half-fix
+   (tested; surfaced on Check values AND after save; walkthrough step 8 makes the modeler fix
+   both rows and verify the warning). Residual (schema guardrail): parameter VALUES are still
+   not range-checked by the validator — that is v1.1 schema semantics; the consistency warning
+   covers the dimension class that bit round 3.
+7. **Jargon reached the screen/report — CONFIRMED, FIXED (with a stated wording decision).**
+   Validator messages carry no repo paths ("schemas/familyspec/…") or internal codenames
+   ("shop2revit") anymore; the Build Family tooltip no longer says ".pred.json"; the report
+   jargon-guard test now also bans repo paths/codenames. Decision, stated: the word "spec"
+   (as "equipment spec") and named fields like geometry.depth.value STAY — the first is plain
+   English for the thing, the second is the pointer the fix needs; both reviewed as
+   comprehensible without training.
+8. **Forced failure never reached the Revit stage — CONFIRMED, FIXED in the walkthrough.**
+   New step 9: set a built out\*.rfa read-only, re-run the batch — a genuine in-Revit write
+   failure mid-batch, expected to quarantine as a machine-class failure while the rest
+   continue. Execution HUMAN-VERIFY-REQUIRED like the rest of the walkthrough.
+9. **Threading claim overstated — CONFIRMED (the reviewer is right about pushed frames
+   pumping the whole thread's message loop), FIXED.** Revit's main window is now DISABLED for
+   the run (user32 EnableWindow — the same owner-disable semantics a modal dialog gets) and
+   re-enabled in a finally BEFORE any dialog; the progress window refuses to close mid-run;
+   the "(Not Responding)" ghosting possibility is stated in the window header and walkthrough
+   step 4; comments now describe the real mechanism. In-Revit confirmation: walkthrough.
+10. Smaller: committed demo fixtures replace Notepad surgery (a+f; zz-depth-miss carries a
+    low-confidence Depth so the CHECK-flag demo is real, and its own warning states the true
+    depth); last "M1" reference fixed (b); units now editable in the review grid (c);
+    category label says "(from the submittal)" and the template mapping gap is DEBT below
+    (d); APEX_BATCH_DIR hijack risk accepted as the scripted-mode switch, with an explicit
+    "unset after scripted runs" operator step (e).
+
+DEBT added this cycle: category-driven template selection (hidden-ahu9 is "Mechanical
+Equipment" and silently builds on the electrical template — needs a Revit machine to build a
+category→template map safely); validator range semantics for parameter values (v1.1).
+
+Suite after fixes: 182 assertions, ALL TESTS PASSED, both targets compile (fresh-compile
+guaranteed). Windows CI green through commit b9f4510; runs for 54e064b+ pending at write time.
+
+**Cycle 4 re-evaluation (protocol checkpoint):** V2's findings were concentrated exactly where
+V1 predicted ignorance (in-Revit behavior) plus one class V1 missed entirely (the fixtures'
+parameter lists vs the flex checks — an integration seam between two rounds' code). Remaining
+time goes to: V2 re-verification of the fixes (fresh hostile pass), final V3 gate, EXIT
+entry + handoff. No scope changes.
