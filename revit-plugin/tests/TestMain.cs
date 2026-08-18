@@ -520,6 +520,14 @@ class TestMain
         System.IO.File.WriteAllText(badPath, "{ definitely not json");
         AssertTrue(SpecReviewModel.Load(badPath).LoadError != null, "review: unreadable file -> LoadError, no throw");
 
+        // JsonNode.Parse throws ArgumentException (not JsonException) on
+        // duplicate keys — must still be a LoadError, never a crash.
+        string dupPath = System.IO.Path.Combine(tmp, "dupkeys.pred.json");
+        System.IO.File.WriteAllText(dupPath,
+            "{ \"schema_version\": \"1.0\", \"schema_version\": \"1.0\" }");
+        AssertTrue(SpecReviewModel.Load(dupPath).LoadError != null,
+            "review: duplicate-key file -> LoadError, no throw (ArgumentException path)");
+
         string? goldenDir = FindRepoFile(System.IO.Path.Combine("schemas", "familyspec", "fixtures", "golden"));
         AssertTrue(goldenDir != null, "review: golden fixture dir located");
         if (goldenDir != null)

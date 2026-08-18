@@ -85,10 +85,14 @@ public sealed class SpecReviewModel
                     $"'{Path.GetFileName(path)}' is not an equipment spec (the file must contain a single JSON object).");
             return new SpecReviewModel(path, root, text, null);
         }
-        catch (JsonException ex)
+        // Not only JsonException: JsonNode.Parse throws ArgumentException on
+        // duplicate keys (which JsonDocument tolerates) — any parse failure
+        // must become a LoadError, never an unhandled crash in the command
+        // (V2 third-pass finding 3).
+        catch (Exception ex)
         {
             return new SpecReviewModel(path, null, text,
-                $"'{Path.GetFileName(path)}' is not readable as JSON: {ex.Message}");
+                $"'{Path.GetFileName(path)}' is not readable as an equipment spec: {ex.Message}");
         }
     }
 

@@ -116,9 +116,13 @@ public class ReviewSubmittalCommand : IExternalCommand
                 };
                 if (confirm.Show() != TaskDialogResult.Yes)
                 {
+                    // Same routing as the other "review saved" dialog: only
+                    // Save-and-Build / Batch Build keep the out\ folder and
+                    // the build report coherent (V2 third-pass finding 1).
                     TaskDialog.Show("Apex — review saved",
                         $"Your corrections are saved in {fileLabel}; nothing was built. " +
-                        "Run Batch Build (or Build Family) when ready.");
+                        "To build it, open it in Review Submittal again and choose Save and Build — " +
+                        "or re-run Batch Build on the folder.");
                     return Result.Succeeded;
                 }
             }
