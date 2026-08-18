@@ -791,3 +791,89 @@ DEBT logged (schema-implying, routed around): the review UI wants per-field prov
 page/table of the submittal a value came from) — that is extraction-schema territory (v1.1
 field), NOT added this round. Confidence is already in the contract (`confidence` map) and is
 used as-is.
+
+### Cycle 1–2 build log (T0+3 → T0+18, closed 20:11 UTC) — all five work items coded, tested, committed
+
+Commit 1279d84 (pushed). What exists now, with the proof for each brief item:
+
+1. **Ribbon in customer language**: panel "M1" → **Submittals** with Review Submittal / Build
+   Family / Batch Build in order of use; tooltips rewritten across Account/Generate/Validate
+   (no "AFIS", "OAuth PKCE", "Doc 8", "RFA-generation jobs" in customer-facing text; the one
+   deliberate remainder is ".pred.json" in parentheses where the file picker shows that
+   extension anyway). Destructive actions confirmable: batch shows a Yes/No dialog naming the
+   folder, count, and replace behavior (default **No**); single build confirms replacing an
+   existing .rfa; review Save keeps the original as .bak. Operator kit texts updated
+   (OPERATOR_CHECKLIST.md step 2, run-batch.ps1 click path).
+2. **Batch dialog with per-item progress**: `BatchProgressWindow` (pure code-built WPF — this
+   toolchain has no XAML compiler), per-item "Building i of N — file", per-item result lines
+   (✓ built / ⚠ built-check-values / ✗ failed+class+message), progress bar, end summary dialog
+   with built/failed/check-values counts. Threading per the brief's sanctioned patterns: ALL
+   Revit API calls stay on the API thread; the window repaints via a Render-priority
+   DispatcherFrame pump between per-item transactions — repaint without input dispatch, so no
+   re-entrancy into Revit and no click-during-transaction. Trade-off stated in the pre-run
+   dialog ("Revit will be busy"). Progress failures are counted, logged, and never kill the
+   batch; scripted (APEX_BATCH_DIR) runs stay headless. DEBT (logged): a truly interactive
+   modeless dialog (cancel button, live Revit) needs the ExternalEvent pattern — deferred,
+   the modal-but-honest version ships first.
+3. **Spec review & override**: `SpecReviewModel` (Revit-free, fully tested here) +
+   `SpecReviewWindow` + `ReviewSubmittalCommand`. Shows every extracted value with the
+   extraction's confidence; <80% flagged "CHECK" (threshold shared with the report generator
+   by a tested constant). Edits limited to values/units — structure (spec_type/group/
+   is_instance) stays read-only: a structural miss is an upstream extraction bug, not
+   something to hand-patch per drawing. The corrected file goes through the SAME v1
+   validator; save REFUSES while invalid; original kept as .bak (first save wins — the .bak
+   is always the extraction as delivered). "Save and Build" rebuilds exactly that item after
+   the modal closes, on the API thread.
+4. **Customer-kept build report**: `BatchRunReport.BuildCustomerReport` writes
+   `out/BUILD_REPORT.md` next to the .rfa files: headline counts over ALL drawings, per-item
+   equipment name, drawing file, result, size, values set, geometry checks
+   (resize/centering), low-confidence values BY NAME, and a what-to-do line per failure class
+   (machine problems blamed on the machine, not the drawing). Tested to contain no taxonomy
+   jargon and no stack traces.
+5. **One log file per run**: `ApexLog.BeginRun` tees every line into
+   `run-yyyyMMdd-HHmmss-<name>.log` while the daily log keeps everything; batch, single
+   build, and review each open a scope; every summary dialog and the report footer name the
+   file ("send me the log" is now one file).
+
+Verification so far (V3-grade, pasted from the suite run at ~20:08 UTC):
+
+```
+PASS  review: zero depth is rejected before the override
+PASS  review: rejection names geometry.depth.value
+PASS  review: depth row borrows the Dimensions parameter's low confidence
+PASS  review: save refuses an invalid spec
+PASS  review: corrected spec validates
+PASS  review: .bak preserves the extraction as delivered
+PASS  review: later saves never overwrite the as-delivered .bak
+PASS  report: low-confidence threshold shared with the review model (no silent drift)
+PASS  report: no taxonomy jargon or stack traces in the customer report
+PASS  runlog: nothing lands in the run file after the run ends
+ALL TESTS PASSED
+```
+
+(43 new assertions total across review/report/runlog sections; both targets compile — net48
+"exit: 0" with zero error lines, net8 likewise.)
+
+**The override demo on a real parser-miss class (EXIT item 2), status**: demonstrated at the
+model layer end-to-end IN THIS ENVIRONMENT — a spec with `geometry.depth.value = 0` and
+confidence 0.31 (the round-1 nq430 depth-miss class) is rejected by the validator naming the
+field, surfaced as CHECK in the field list, corrected via TrySet, revalidated, and saved with
+the original preserved. The in-Revit click-path version of the same demo is on the human
+walkthrough checklist (HUMAN-VERIFY-REQUIRED — no Revit here).
+
+### Cycle 2 re-evaluation (protocol checkpoint, 20:11 UTC)
+
+Q: is the plan still the highest-value path? Assessment against the brief's goal ("a CVE
+modeler who has never seen this tool… without calling Hayden"):
+
+- Biggest remaining risk is NOT more code — it is that nobody has walked the path in a real
+  Revit. The one-page walkthrough checklist for Hayden is therefore next, before any polish.
+- The forced-mid-batch-failure EXIT item: the Revit-free slices (corrupt file → BadInput →
+  quarantine name → report text → jsonl line) are all proven by the suite; what remains is
+  genuinely Revit-bound and goes on the checklist as its own step with expected artifacts
+  listed.
+- DEFERRED as debt (would not survive a "is this the best use of the remaining hour?" test):
+  ExternalEvent modeless progress; icons; a review grid that edits units inline for
+  dimensions (unit edits work via the model; the window exposes value edits — acceptable
+  because unit errors are named by the validator and correctable in the portal). Course
+  unchanged otherwise.
