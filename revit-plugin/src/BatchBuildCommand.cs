@@ -134,6 +134,10 @@ public class BatchBuildCommand : IExternalCommand
                 try { owner = commandData.Application.MainWindowHandle; } catch { }
                 progress = new BatchProgressWindow(files.Length, batchDir!, owner);
                 progress.Show();
+                // Modal semantics for the pumped loop: Revit's window is
+                // disabled until EndRunUi in the finally below, so pumped
+                // messages cannot re-enter Revit mid-transaction.
+                progress.BeginRunUi();
                 BatchProgressWindow.Pump();
             }
             catch (Exception ex)
@@ -146,6 +150,8 @@ public class BatchBuildCommand : IExternalCommand
 
         var rows = new List<BatchRunReport.Row>();
         int index = 0;
+        try
+        {
         foreach (string file in files)
         {
             index++;
@@ -188,6 +194,14 @@ public class BatchBuildCommand : IExternalCommand
                 }
             }
         }
+        }
+        finally
+        {
+            // Revit's window MUST come back even if the loop dies unexpectedly,
+            // and before any dialog below (a disabled owner can't be clicked).
+            try { progress?.EndRunUi(); }
+            catch (Exception ex) { ApexLog.Warn("Progress teardown failed: " + ex.Message); }
+        }
 
         try
         {
@@ -215,7 +229,9 @@ public class BatchBuildCommand : IExternalCommand
 
         int ok = rows.Count(r => r.BuildOk);
         int failedCount = rows.Count - ok;
-        int review = rows.Count(r => r.BuildOk && (r.ValidateWarnings > 0 || r.LowConfidenceFields.Length > 0));
+        // Same definition as the report headline and the progress ⚠ flag —
+        // failed geometry checks are "needs review", never plain success.
+        int review = rows.Count(BatchRunReport.NeedsReview);
         string summary = $"Batch complete: {ok}/{rows.Count} built, {failedCount} failed, {review} built-but-check-values. " +
             $"Report: {reportPath}; matrix: {Path.Combine(batchDir!, "RUN_MATRIX.md")}; " +
             $"failures quarantined under {quarantineDir}." +

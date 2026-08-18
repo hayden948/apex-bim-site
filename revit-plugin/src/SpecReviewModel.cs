@@ -148,7 +148,10 @@ public sealed class SpecReviewModel
             fields.Add(new Field
             {
                 Key = $"geometry.{dim}",
-                Label = char.ToUpperInvariant(dim[0]) + dim.Substring(1),
+                // "Overall": the same drawing often also carries a
+                // Dimensions-group PARAMETER with the same name — two rows
+                // both called "Depth" would be indistinguishable in the grid.
+                Label = "Overall " + dim,
                 Value = StringOf(d?["value"]),
                 Units = d?["unit"] is JsonNode u && u.GetValueKind() == JsonValueKind.String ? u.GetValue<string>() : null,
                 // v1 geometry carries no confidence of its own; when the extraction
@@ -303,6 +306,15 @@ public sealed class SpecReviewModel
         }
     }
 
+    /// <summary>"Depth", "Apex_Depth", "APEX_depth" all name the depth dimension.</summary>
+    private static bool NamesDimension(string? paramName, string dim)
+    {
+        if (string.IsNullOrEmpty(paramName)) return false;
+        string n = paramName!;
+        if (n.StartsWith("Apex_", StringComparison.OrdinalIgnoreCase)) n = n.Substring(5);
+        return string.Equals(n, dim, StringComparison.OrdinalIgnoreCase);
+    }
+
     private double? DimensionParameterConfidence(string dim)
     {
         if (_root?["parameters"] is not JsonArray pars) return null;
@@ -311,11 +323,49 @@ public sealed class SpecReviewModel
             if (p is not JsonObject o) continue;
             if (o["group"] is not JsonNode g || g.GetValueKind() != JsonValueKind.String
                 || g.GetValue<string>() != "Dimensions") continue;
-            if (!string.Equals(StringOf(o["name"]), dim, StringComparison.OrdinalIgnoreCase)) continue;
+            if (!NamesDimension(StringOf(o["name"]), dim)) continue;
             if (o["confidence"] is JsonNode c && c.GetValueKind() == JsonValueKind.Number)
                 return c.GetValue<double>();
         }
         return null;
+    }
+
+    /// <summary>
+    /// Non-blocking cross-checks the validator cannot make (it has no field
+    /// semantics): when the drawing carries BOTH an overall dimension and a
+    /// same-named Dimensions parameter and their numbers disagree, say so —
+    /// otherwise a modeler fixing one of the two "Depth"s ships the other one
+    /// wrong. Returned as plain-language warnings for the review status box.
+    /// </summary>
+    public List<string> ConsistencyWarnings()
+    {
+        var warnings = new List<string>();
+        if (_root == null) return warnings;
+        if (_root["parameters"] is not JsonArray pars) return warnings;
+        foreach (string dim in new[] { "width", "depth", "height" })
+        {
+            JsonNode? g = _root["geometry"]?[dim]?["value"];
+            if (g == null || g.GetValueKind() != JsonValueKind.Number) continue;
+            double geomVal = g.GetValue<double>();
+            foreach (JsonNode? p in pars)
+            {
+                if (p is not JsonObject o || !NamesDimension(StringOf(o["name"]), dim)) continue;
+                JsonNode? v = o["value"];
+                double paramVal;
+                if (v == null) continue;
+                if (v.GetValueKind() == JsonValueKind.Number) paramVal = v.GetValue<double>();
+                else if (v.GetValueKind() == JsonValueKind.String
+                    && double.TryParse(v.GetValue<string>(), NumberStyles.Float,
+                        CultureInfo.InvariantCulture, out double parsed)) paramVal = parsed;
+                else continue;
+                if (Math.Abs(paramVal - geomVal) > 0.001)
+                {
+                    warnings.Add($"Overall {dim} is {StringOf(g)} but the '{StringOf(o["name"])}' parameter " +
+                        $"says {StringOf(v)} — if you corrected one, correct the other to match.");
+                }
+            }
+        }
+        return warnings;
     }
 
     private static string StringOf(JsonNode? n)

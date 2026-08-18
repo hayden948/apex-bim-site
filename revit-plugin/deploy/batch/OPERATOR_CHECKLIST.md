@@ -25,7 +25,8 @@ ship ledger marks HUMAN-VERIFY-REQUIRED. Send back the four artifacts in step 6.
 ## Per-batch run
 
 5. Put the remaining `.pred.json` files in one folder, e.g. `C:\apex\batch1\`. Then either:
-   - **One-click**: open Revit (any document, or none — the start screen is fine), click
+   - **One-click**: open Revit (any document, or none — the start screen works from plugin
+     v0.4.0+, which registers zero-document availability; older builds grey the button), click
      **Batch Build**, pick any file in the folder; or
    - **Scripted**: `powershell -File run-batch.ps1 -BatchDir C:\apex\batch1` (see the
      journal note inside that script — journal replay needs a one-time recording).
@@ -64,3 +65,10 @@ starts fresh: the jsonl is reset, stale quarantine markers are cleared, and each
 stale output is removed before it is processed — so every artifact you collect belongs to THIS
 run. If you ever find a `.rfa` for a drawing whose matrix row says FAIL, that is a containment
 bug — report it with both files.
+
+## After scripted runs
+
+9. Unset `APEX_BATCH_DIR` when you finish scripted runs (`Remove-Item Env:APEX_BATCH_DIR`, or
+   remove it from System Environment Variables if you set it there). While it is set, every
+   interactive **Batch Build** click runs headless against THAT folder — no confirmation, no
+   dialogs — because the variable is the scripted-mode switch.

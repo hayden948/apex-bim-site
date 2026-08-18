@@ -58,16 +58,22 @@ public class ApexApplication : IExternalApplication
 
             // Round 4: the panel a first-time CVE modeler works from, in their
             // order of use — review what was extracted, build one, build all.
+            // These commands create their own family documents, so they are
+            // available at Revit's start screen too (zero-document): without an
+            // availability class Revit greys external commands there and the
+            // first-time user's first click is a dead button.
             RibbonPanel build = Panel(app, "Submittals");
             AddButton(build, asm, "ApexReviewSubmittal", "Review Submittal", typeof(ReviewSubmittalCommand),
                 "Check the values Apex extracted from a submittal before building — every value is shown " +
-                "with how sure the extraction was; correct any field and build that one family");
+                "with how sure the extraction was; correct any field and build that one family",
+                zeroDoc: true);
             AddButton(build, asm, "ApexBuildFromJson", "Build Family", typeof(BuildFromPredJsonCommand),
-                "Build one Revit family from an extracted equipment spec (the .pred.json file that " +
-                "came with the submittal)");
+                "Build one Revit family from a submittal's extracted equipment file (downloaded from " +
+                "the Apex portal)", zeroDoc: true);
             AddButton(build, asm, "ApexBatchBuild", "Batch Build", typeof(BatchBuildCommand),
                 "Build every equipment spec in a folder into families. One bad drawing never stops the " +
-                "rest; a build report next to the families says what was built, what failed, and what to do");
+                "rest; a build report next to the families says what was built, what failed, and what to do",
+                zeroDoc: true);
 
             RibbonPanel fam = Panel(app, "Families");
             if (ShowPrototypes)
@@ -125,10 +131,23 @@ public class ApexApplication : IExternalApplication
         }
     }
 
-    private static void AddButton(RibbonPanel panel, string asm, string name, string text, Type cmd, string tooltip)
+    private static void AddButton(RibbonPanel panel, string asm, string name, string text, Type cmd, string tooltip,
+        bool zeroDoc = false)
     {
         var data = new PushButtonData(name, text, asm, cmd.FullName);
+        if (zeroDoc) data.AvailabilityClassName = typeof(CommandAlwaysAvailable).FullName;
         if (panel.AddItem(data) is PushButton btn)
             btn.ToolTip = tooltip;
     }
+}
+
+/// <summary>
+/// Availability for commands that need no open document (they create their own
+/// family documents): keeps the Submittals buttons clickable at Revit's
+/// zero-document start screen, where external commands are otherwise disabled.
+/// </summary>
+public class CommandAlwaysAvailable : IExternalCommandAvailability
+{
+    public bool IsCommandAvailable(UIApplication applicationData, Autodesk.Revit.DB.CategorySet selectedCategories)
+        => true;
 }

@@ -220,7 +220,7 @@ public class BuildFromPredJsonCommand : IExternalCommand
         {
             ApexLog.Error("Family generation failed.", ex);
             message = "The build failed: " + ex.Message +
-                $"\n\nNo family file was left behind. Run log: {run.Path ?? "(daily Apex log)"}";
+                $"\n\nNo new family file was written. Run log: {run.Path ?? "(daily Apex log)"}";
             TaskDialog.Show("Apex — build failed", message);
             return Result.Failed;
         }
@@ -235,6 +235,7 @@ public class BuildFromPredJsonCommand : IExternalCommand
     internal static BuildOutcome BuildToFile(Application app, PredFamily pred, string templatePath, string outputPath)
     {
         Document? famDoc = null;
+        bool attemptedSave = false;
         try
         {
             famDoc = app.NewFamilyDocument(templatePath)
@@ -252,6 +253,13 @@ public class BuildFromPredJsonCommand : IExternalCommand
                     FamilyManager fm = famDoc.FamilyManager;
                     if (fm.CurrentType == null) fm.NewType("Standard");
                     AddParameters(fm, pred.Parameters, ref paramsAdded, ref paramsValued);
+                    // The parametric-box promise must not depend on the spec's
+                    // parameter list: the labeled dimensions below need family
+                    // parameters named Apex_Width/Apex_Depth/Apex_Height, and
+                    // most extractions don't carry them (round-4 adversarial
+                    // finding: 5 of 6 golden fixtures would have failed every
+                    // flex check). Create the missing ones from the geometry.
+                    EnsureDimensionParameters(fm, pred.Geometry!);
                     flex = BuildParametricBox(famDoc, pred.Geometry!, fm);
                     tx.Commit();
                 }
@@ -262,6 +270,7 @@ public class BuildFromPredJsonCommand : IExternalCommand
                 }
             }
 
+            attemptedSave = true;
             famDoc.SaveAs(outputPath, new SaveAsOptions { OverwriteExistingFile = true });
             return new BuildOutcome
             {
@@ -274,14 +283,20 @@ public class BuildFromPredJsonCommand : IExternalCommand
         }
         catch
         {
-            // Containment: never leave a partial .rfa behind on failure.
-            try
+            // Containment: never leave a PARTIAL .rfa behind — but only touch
+            // the file if this build actually attempted to write it. Deleting
+            // on earlier failures would destroy a pre-existing family this
+            // build never produced (round-4 adversarial finding 3).
+            if (attemptedSave)
             {
-                if (File.Exists(outputPath)) File.Delete(outputPath);
-            }
-            catch (Exception cleanupEx)
-            {
-                ApexLog.Warn("Could not remove partial output: " + cleanupEx.Message);
+                try
+                {
+                    if (File.Exists(outputPath)) File.Delete(outputPath);
+                }
+                catch (Exception cleanupEx)
+                {
+                    ApexLog.Warn("Could not remove partial output: " + cleanupEx.Message);
+                }
             }
             throw;
         }
@@ -296,6 +311,34 @@ public class BuildFromPredJsonCommand : IExternalCommand
                 // Closing an already-closed doc throws; nothing to do.
             }
         }
+    }
+
+    /// <summary>
+    /// Create (and value from the box geometry) the three dimension parameters
+    /// the labeled dimensions bind to, when the spec didn't supply them. Values
+    /// are set so the labels agree with the sketched geometry at first regen.
+    /// </summary>
+    private static void EnsureDimensionParameters(FamilyManager fm, PredGeometry geom)
+    {
+        void Ensure(string name, PredDim? dim)
+        {
+            try
+            {
+                FamilyParameter fp = fm.get_Parameter(name)
+                    ?? fm.AddParameter(name, GroupTypeId.Geometry, SpecTypeId.Length, false);
+                double feet = DimToFeet(dim);
+                if (fp != null && feet > 0.0) fm.Set(fp, feet);
+            }
+            catch (Exception ex)
+            {
+                // A failed dimension parameter degrades to an unflexed check,
+                // reported honestly in the build checks — never a build abort.
+                ApexLog.Warn($"Dimension parameter '{name}' could not be ensured: " + ex.Message);
+            }
+        }
+        Ensure("Apex_Width", geom.Width);
+        Ensure("Apex_Depth", geom.Depth);
+        Ensure("Apex_Height", geom.Height);
     }
 
     private static FlexResult BuildParametricBox(Document doc, PredGeometry geom, FamilyManager fm)

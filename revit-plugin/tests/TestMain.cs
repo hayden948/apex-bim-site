@@ -222,8 +222,10 @@ class TestMain
             "primitive is case-sensitive per schema const (BOX rejected)");
 
         var s2r = V(valid.Replace(@"""family_name"":""F"",", @"""family_name"":""F"",""product_type"":""pad_mount_transformer"","));
-        AssertTrue(!s2r.IsValid && s2r.Errors.Any(e => e.Contains("shop2revit")),
-            "shop2revit-shaped doc named as wrong contract, not field soup");
+        AssertTrue(!s2r.IsValid && s2r.Errors.Any(e => e.Contains("different, unsupported export format")),
+            "shop2revit-shaped doc named as wrong format, not field soup");
+        AssertTrue(!s2r.Errors.Any(e => e.Contains("shop2revit") || e.Contains("schemas/")),
+            "wrong-format message carries no internal codenames or repo paths (round 4)");
 
         AssertTrue(AfisRevitMapper.SupportsAfisVersion("1.0.0"), "afis 1.x supported");
         AssertTrue(!AfisRevitMapper.SupportsAfisVersion("2.0.0"), "afis 2.x rejected at build boundary");
@@ -528,6 +530,57 @@ class TestMain
             AssertTrue(g.BuildFields().Count(f => f.Editable) > 15, "review: golden fixture exposes editable fields");
             AssertTrue(g.ExtractionWarnings.Count == 7, "review: extraction's own warnings surfaced");
         }
+
+        // V2 round-4 findings 6: dimension-parameter matching must accept the
+        // Apex_ naming convention, and a half-fixed depth (geometry corrected,
+        // same-named parameter still 0) must be called out, not shipped silently.
+        string apexPath = System.IO.Path.Combine(tmp, "apexdims.pred.json");
+        System.IO.File.WriteAllText(apexPath, @"{
+  ""schema_version"": ""1.0"", ""family_name"": ""A"", ""category"": ""Electrical Equipment"",
+  ""geometry"": { ""primitive"": ""box"",
+    ""width"": { ""value"": 10, ""unit"": ""in"" }, ""depth"": { ""value"": 0, ""unit"": ""in"" },
+    ""height"": { ""value"": 10, ""unit"": ""in"" } },
+  ""parameters"": [
+    { ""name"": ""Apex_Depth"", ""spec_type"": ""Length"", ""group"": ""Dimensions"",
+      ""is_instance"": false, ""value"": ""0"", ""units"": ""in"", ""confidence"": 0.4 } ]
+}");
+        var apex = SpecReviewModel.Load(apexPath);
+        var apexDepth = apex.BuildFields().First(f => f.Key == "geometry.depth");
+        AssertTrue(apexDepth.Confidence.HasValue && apexDepth.LowConfidence,
+            "review: Apex_-prefixed Dimensions parameter lends its confidence to the geometry row");
+        AssertTrue(apexDepth.Label == "Overall depth",
+            "review: geometry rows labeled 'Overall …' to disambiguate from same-named parameters");
+        AssertTrue(apex.TrySet("geometry.depth", "24") == null, "review: half-fix applied");
+        var drift = apex.ConsistencyWarnings();
+        AssertTrue(drift.Count == 1 && drift[0].Contains("Apex_Depth") && drift[0].Contains("24"),
+            "review: geometry/parameter disagreement is named after a half-fix");
+        AssertTrue(apex.TrySet("parameters[0].value", "24") == null, "review: parameter side fixed too");
+        AssertTrue(apex.ConsistencyWarnings().Count == 0,
+            "review: consistency warning clears when both sides agree");
+
+        // The committed walkthrough demo files behave exactly as the checklist promises.
+        string? demoDir = FindRepoFile(System.IO.Path.Combine("schemas", "familyspec", "fixtures", "demo"));
+        AssertTrue(demoDir != null, "review: demo fixture dir located");
+        if (demoDir != null)
+        {
+            var miss = SpecReviewModel.Load(System.IO.Path.Combine(demoDir, "zz-depth-miss.pred.json"));
+            AssertTrue(miss.LoadError == null, "review: demo depth-miss loads");
+            AssertTrue(!miss.Validate().IsValid
+                && miss.Validate().Errors.Any(e => e.Contains("geometry.depth.value")),
+                "review: demo depth-miss blocked naming the field");
+            AssertTrue(miss.BuildFields().First(f => f.Key == "geometry.depth").LowConfidence,
+                "review: demo depth-miss shows the CHECK flag (low-confidence Depth parameter)");
+            AssertTrue(miss.TrySet("geometry.depth", "24") == null
+                && miss.TrySet("parameters[0].value", "24") == null
+                && miss.Validate().IsValid,
+                "review: demo depth-miss is fixable exactly as the walkthrough says");
+
+            bool corruptRejected = false;
+            try { JsonDocument.Parse(System.IO.File.ReadAllText(
+                System.IO.Path.Combine(demoDir, "zz-corrupt.pred.json"))); }
+            catch (JsonException) { corruptRejected = true; }
+            AssertTrue(corruptRejected, "review: demo corrupt file is genuinely unparseable (BadInput path)");
+        }
     }
 
     // ---------- Round 4: customer build report ----------
@@ -584,8 +637,29 @@ class TestMain
         AssertTrue(rep.Contains("machine setup problem"),
             "report: environment failure blamed on the machine, not the drawing");
         AssertTrue(rep.Contains("run-x.log"), "report: run log named in the footer");
-        AssertTrue(!rep.Contains("SchemaViolation") && !rep.Contains("stack"),
-            "report: no taxonomy jargon or stack traces in the customer report");
+        AssertTrue(!rep.Contains("SchemaViolation") && !rep.Contains("stack")
+            && !rep.Contains("schemas/familyspec") && !rep.Contains("shop2revit"),
+            "report: no taxonomy jargon, stack traces, repo paths, or codenames in the customer report");
+
+        // V2 round-4 finding 5: a family whose geometry checks failed is
+        // "needs review" everywhere, with a next action in the report.
+        var suspectRow = new BatchRunReport.Row
+        {
+            File = "d.pred.json", ValidateOk = true, BuildOk = true,
+            ParamsAdded = 2, ParamsValued = 2,
+            FlexWidth = true, FlexDepth = false, FlexHeight = true, Centered = true,
+            RfaPath = "out/d.rfa", EquipmentName = "Suspect Unit",
+        };
+        AssertTrue(BatchRunReport.NeedsReview(suspectRow),
+            "report: failed geometry checks count as needs-review");
+        AssertTrue(!BatchRunReport.NeedsReview(okRow) || okRow.LowConfidenceFields.Length > 0,
+            "report: NeedsReview matches the low-confidence flag on the ok row");
+        string repSuspect = BatchRunReport.BuildCustomerReport(new[] { suspectRow }, "t", null);
+        AssertTrue(repSuspect.Contains("treat it as suspect")
+            && repSuspect.Contains("What to do: rebuild just this item"),
+            "report: built-but-suspect item names a next action (V2 finding: none existed)");
+        AssertTrue(repSuspect.Contains("1 built family lists values worth double-checking"),
+            "report: suspect-only batch counted in the review headline");
 
         string jsonl = BatchRunReport.ToJsonLine(okRow);
         using var line = JsonDocument.Parse(jsonl);

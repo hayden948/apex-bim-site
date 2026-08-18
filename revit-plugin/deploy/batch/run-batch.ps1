@@ -4,7 +4,7 @@
 #
 # Sets APEX_BATCH_DIR (which makes BatchBuildCommand run without any dialog) and starts
 # Revit. Two levels of automation:
-#  A. Semi-scripted (default, reliable): Revit opens; you click Apex BIM Studio -> M1 ->
+#  A. Semi-scripted (default, reliable): Revit opens; you click Apex BIM Studio -> Submittals ->
 #     Batch Build once. Everything after that click is unattended.
 #  B. Fully headless (journal replay): record once, replay forever. Journal replay is
 #     version- and id-sensitive, so the template ships with a placeholder:

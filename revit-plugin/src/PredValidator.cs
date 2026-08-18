@@ -66,7 +66,7 @@ public static class PredValidator
             if (ver.ValueKind != JsonValueKind.String || ver.GetString() != Version)
             {
                 r.Errors.Add($"{source}: schema_version must be \"{Version}\" (got {Raw(ver)}). " +
-                    "This build reads FamilySpec v1 only — newer files need a newer add-in.");
+                    "This add-in reads Apex equipment specs v1 only — a newer file needs a newer add-in.");
                 return r;
             }
         }
@@ -237,9 +237,11 @@ public static class PredValidator
             r.Errors.Add($"{source}: {label}.{prop} must be one of {string.Join(", ", allowed)} (got {Raw(v)}).");
     }
 
-    // Telltale keys of the quarantined shop2revit FamilySpec, which claims the
-    // same "1.0" identifier for a different shape — name the wrong contract
-    // instead of producing field-soup errors.
+    // Telltale keys of the retired legacy exporter's format (internally:
+    // shop2revit), which claims the same "1.0" identifier for a different
+    // shape — name the wrong-format situation in the customer's language
+    // instead of producing field-soup errors. These messages reach the
+    // customer's screen and kept report: no repo paths, no internal codenames.
     private static readonly string[] Shop2RevitKeys = { "product_type", "source", "bill_of_materials", "series" };
 
     private static void CheckUnknown(JsonElement obj, string[] known, string prefix, string source, Result r)
@@ -248,10 +250,10 @@ public static class PredValidator
         {
             if (known.Contains(p.Name)) continue;
             string msg = prefix.Length == 0 && Shop2RevitKeys.Contains(p.Name)
-                ? $"{source}: field '{p.Name}' belongs to the quarantined shop2revit FamilySpec, not FamilySpec " +
-                  $"v{Version} — wrong contract, see schemas/familyspec/DECISION.md."
-                : $"{source}: unknown field '{prefix}{p.Name}' — not part of FamilySpec v{Version}. " +
-                  "Remove it, or check for a typo against schemas/familyspec/familyspec.v1.schema.json.";
+                ? $"{source}: field '{p.Name}' comes from a different, unsupported export format — this is " +
+                  "not an Apex equipment spec. Download the spec from the Apex portal instead."
+                : $"{source}: unknown field '{prefix}{p.Name}' — not part of an Apex equipment spec " +
+                  $"(v{Version}). Remove it or fix the spelling.";
             if (r.IsLegacyV0) r.Warnings.Add(msg);
             else r.Errors.Add(msg);
         }

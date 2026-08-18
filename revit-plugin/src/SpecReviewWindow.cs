@@ -28,6 +28,12 @@ internal sealed class SpecReviewWindow : Window
     {
         public SpecReviewModel.Field Field = null!;
         public TextBox Box = null!;
+        public TextBox? UnitsBox;
+        public string UnitsOriginal = "";
+        // "geometry.width" edits its unit at ".unit"; "parameters[i].value" at ".units".
+        public string UnitsKey => Field.Key.EndsWith(".value", StringComparison.Ordinal)
+            ? Field.Key.Substring(0, Field.Key.Length - ".value".Length) + ".units"
+            : Field.Key + ".unit";
     }
 
     /// <summary>True once the corrected spec has been written to disk.</summary>
@@ -183,7 +189,18 @@ internal sealed class SpecReviewWindow : Window
             Grid.SetRow(box, rowIx);
             Grid.SetColumn(box, 1);
             grid.Children.Add(box);
-            _editors.Add(new Editor { Field = f, Box = box });
+
+            // Units are a real parser-miss class (mm read as in) — editable
+            // alongside the value; the geometry unit list is validated on save.
+            var unitsBox = new TextBox { Text = f.Units ?? "", Margin = new Thickness(0, 1, 6, 1) };
+            Grid.SetRow(unitsBox, rowIx);
+            Grid.SetColumn(unitsBox, 2);
+            grid.Children.Add(unitsBox);
+
+            _editors.Add(new Editor
+            {
+                Field = f, Box = box, UnitsBox = unitsBox, UnitsOriginal = f.Units ?? "",
+            });
         }
         else
         {
@@ -198,12 +215,12 @@ internal sealed class SpecReviewWindow : Window
             Grid.SetRow(val, rowIx);
             Grid.SetColumn(val, 1);
             grid.Children.Add(val);
-        }
 
-        var units = new TextBlock { Text = f.Units ?? "", Margin = new Thickness(2, 3, 6, 3) };
-        Grid.SetRow(units, rowIx);
-        Grid.SetColumn(units, 2);
-        grid.Children.Add(units);
+            var units = new TextBlock { Text = f.Units ?? "", Margin = new Thickness(2, 3, 6, 3) };
+            Grid.SetRow(units, rowIx);
+            Grid.SetColumn(units, 2);
+            grid.Children.Add(units);
+        }
 
         var conf = new TextBlock { Margin = new Thickness(2, 3, 2, 3) };
         if (f.Confidence.HasValue)
@@ -252,10 +269,22 @@ internal sealed class SpecReviewWindow : Window
         foreach (Editor e in _editors)
         {
             string text = e.Box.Text.Trim();
-            if (text == e.Field.Value) continue;
-            string? err = _model.TrySet(e.Field.Key, text);
-            if (err != null) problems.Add(err);
-            else e.Field.Value = text;
+            if (text != e.Field.Value)
+            {
+                string? err = _model.TrySet(e.Field.Key, text);
+                if (err != null) problems.Add(err);
+                else e.Field.Value = text;
+            }
+            if (e.UnitsBox != null)
+            {
+                string units = e.UnitsBox.Text.Trim();
+                if (units != e.UnitsOriginal)
+                {
+                    string? err = _model.TrySet(e.UnitsKey, units);
+                    if (err != null) problems.Add(err);
+                    else e.UnitsOriginal = units;
+                }
+            }
         }
         return problems;
     }
@@ -265,10 +294,15 @@ internal sealed class SpecReviewWindow : Window
         List<string> problems = ApplyEdits();
         PredValidator.Result check = _model.Validate();
         problems.AddRange(check.Errors);
+        List<string> consistency = _model.ConsistencyWarnings();
         _status.Text = problems.Count == 0
-            ? "No problems found. The spec is valid and ready to build."
+            ? ("No problems found. The spec is valid and ready to build."
               + (check.Warnings.Count > 0
                   ? $" ({check.Warnings.Count} note(s) — see the run log.)" : "")
+              + (consistency.Count > 0
+                  ? Environment.NewLine + "Worth a look:" + Environment.NewLine + "• " +
+                    string.Join(Environment.NewLine + "• ", consistency)
+                  : ""))
             : "Fix these before building:" + Environment.NewLine + "• " +
               string.Join(Environment.NewLine + "• ", problems.Take(10));
     }
@@ -289,9 +323,15 @@ internal sealed class SpecReviewWindow : Window
             return false;
         }
         Saved = true;
+        List<string> consistency = _model.ConsistencyWarnings();
         _status.Text = $"Saved. The original extraction is kept as " +
-            $"{System.IO.Path.GetFileName(_model.SourcePath)}.bak next to it.";
+            $"{System.IO.Path.GetFileName(_model.SourcePath)}.bak next to it." +
+            (consistency.Count > 0
+                ? Environment.NewLine + "Worth a look before building:" + Environment.NewLine + "• " +
+                  string.Join(Environment.NewLine + "• ", consistency)
+                : "");
         ApexLog.Info($"Review: corrected spec saved to {_model.SourcePath} (original in .bak).");
+        foreach (string w in consistency) ApexLog.Warn("Review consistency: " + w);
         return true;
     }
 

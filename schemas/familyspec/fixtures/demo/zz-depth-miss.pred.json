@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0",
+  "family_name": "Transformer T-1 (Depth Miss Demo)",
+  "category": "Electrical Equipment",
+  "geometry": {
+    "primitive": "box",
+    "width": { "value": 32, "unit": "in" },
+    "depth": { "value": 0, "unit": "in" },
+    "height": { "value": 36, "unit": "in" }
+  },
+  "parameters": [
+    {
+      "name": "Depth",
+      "spec_type": "Length",
+      "group": "Dimensions",
+      "is_instance": false,
+      "value": "0",
+      "units": "in",
+      "confidence": 0.31
+    },
+    {
+      "name": "Apex_Voltage",
+      "spec_type": "Text",
+      "group": "Electrical",
+      "is_instance": false,
+      "value": "480Y/277V",
+      "confidence": 0.9
+    }
+  ],
+  "warnings": [
+    "DEMO FILE for the first-run walkthrough: the depth was deliberately zeroed with low confidence to demonstrate Review Submittal. The real depth on the drawing is 24 in."
+  ]
+}

@@ -10,27 +10,38 @@ namespace Apex.BimStudio;
 /// Round 4: per-item batch progress, honest about the threading reality.
 ///
 /// The Revit API is single-threaded and the batch runs INSIDE the command on
-/// the API thread — no API call ever leaves it. This window is therefore not
-/// an interactive dialog: between per-item transactions the command pumps the
-/// dispatcher at Render priority only (see <see cref="Pump"/>), which repaints
-/// the window WITHOUT processing input. The modeler sees true per-item status
-/// while Revit is busy; nothing can be clicked mid-run, and the pre-run
-/// confirmation says so. (A modeless ExternalEvent UI is logged as round-4
-/// debt in the ship ledger; "frozen-but-progressing with honest status" is the
-/// shipped behavior.)
+/// the API thread — no API call ever leaves it. Between per-item transactions
+/// the command pumps a dispatcher frame (see <see cref="Pump"/>) so this
+/// window repaints with true per-item status. A pumped Win32 message loop
+/// dispatches messages for EVERY window on the thread — including Revit's —
+/// so for the duration of the run Revit's main window is DISABLED
+/// (<see cref="BeginRunUi"/>/<see cref="EndRunUi"/>, the same owner-disable
+/// semantics a modal dialog gets), which is what actually prevents input
+/// re-entrancy into a transaction; and this window refuses to close mid-run.
+/// During a long single item Windows may ghost the titlebar with
+/// "(Not Responding)" — the run is still progressing; the header says so.
+/// (A modeless ExternalEvent UI is logged as round-4 debt in the ship
+/// ledger; "frozen-but-progressing with honest status" is the shipped
+/// behavior.)
 ///
 /// Pure code-built WPF: the build toolchain has no XAML compiler.
 /// </summary>
 internal sealed class BatchProgressWindow : Window
 {
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool EnableWindow(IntPtr hWnd, bool bEnable);
+
     private readonly ProgressBar _bar;
     private readonly TextBlock _status;
     private readonly ListBox _list;
     private readonly int _total;
+    private readonly IntPtr _owner;
+    private bool _running;
 
     public BatchProgressWindow(int total, string folder, IntPtr ownerHandle)
     {
         _total = total;
+        _owner = ownerHandle;
         Title = "Apex — building families";
         Width = 560;
         Height = 420;
@@ -45,7 +56,9 @@ internal sealed class BatchProgressWindow : Window
 
         var header = new TextBlock
         {
-            Text = $"Building {total} equipment famil{(total == 1 ? "y" : "ies")} from:\n{folder}",
+            Text = $"Building {total} equipment famil{(total == 1 ? "y" : "ies")} from:\n{folder}\n" +
+                "Revit is busy until this finishes. If the titlebar briefly says \"Not Responding\" " +
+                "during a large family, the run is still progressing.",
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 8),
         };
@@ -84,10 +97,50 @@ internal sealed class BatchProgressWindow : Window
         }
     }
 
+    /// <summary>
+    /// Disable Revit's main window for the duration of the run (modal
+    /// semantics for a pumped loop) and arm the close guard. Call before the
+    /// first item; pair with <see cref="EndRunUi"/> in a finally.
+    /// </summary>
+    public void BeginRunUi()
+    {
+        _running = true;
+        try
+        {
+            if (_owner != IntPtr.Zero) EnableWindow(_owner, false);
+        }
+        catch (Exception ex)
+        {
+            ApexLog.Warn("Could not disable the Revit window for the batch: " + ex.Message);
+        }
+    }
+
+    /// <summary>Re-enable Revit and allow this window to close. ALWAYS call (finally).</summary>
+    public void EndRunUi()
+    {
+        _running = false;
+        try
+        {
+            if (_owner != IntPtr.Zero) EnableWindow(_owner, true);
+        }
+        catch (Exception ex)
+        {
+            ApexLog.Warn("Could not re-enable the Revit window after the batch: " + ex.Message);
+        }
+    }
+
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        // The batch cannot be interrupted mid-transaction; refuse to close
+        // until the run ends (the command closes this window itself).
+        if (_running) e.Cancel = true;
+        base.OnClosing(e);
+    }
+
     /// <summary>Called on the API thread just before a drawing is processed.</summary>
     public void Starting(int index1, string file)
     {
-        _status.Text = $"Building {index1} of {_total} — {file}  (Revit is busy; this window updates as each family finishes)";
+        _status.Text = $"Building {index1} of {_total} — {file}";
         Pump();
     }
 
@@ -98,9 +151,15 @@ internal sealed class BatchProgressWindow : Window
         var item = new TextBlock { TextTrimming = TextTrimming.CharacterEllipsis };
         if (row.BuildOk)
         {
-            bool review = row.ValidateWarnings > 0 || row.LowConfidenceFields.Length > 0;
+            // Same "needs review" definition as the report headline — a family
+            // whose geometry checks failed must never read as a plain success.
+            bool review = BatchRunReport.NeedsReview(row);
             item.Text = (review ? "⚠ " : "✓ ") + row.File +
-                (review ? " — built; check values (see the build report)" : " — built");
+                (review
+                    ? (BatchRunReport.FlexOk(row)
+                        ? " — built; check values (see the build report)"
+                        : " — built, but geometry checks FAILED (see the build report)")
+                    : " — built");
             if (review) item.Foreground = Brushes.DarkGoldenrod;
         }
         else
@@ -115,10 +174,12 @@ internal sealed class BatchProgressWindow : Window
     }
 
     /// <summary>
-    /// Repaint without re-entrancy: push a dispatcher frame that drains only
-    /// Render-and-above priority work. Input stays queued, so neither this
-    /// window nor Revit's UI can re-enter the running command; layout and
-    /// rendering still run, so the status the modeler sees is current.
+    /// Repaint between items: push a dispatcher frame that exits once
+    /// Render-priority work (layout + paint) has drained. NOTE: a pushed frame
+    /// still runs the thread's Win32 message loop, so it is NOT what prevents
+    /// re-entrancy — disabling Revit's window for the run is
+    /// (<see cref="BeginRunUi"/>); this window itself has no control that can
+    /// reach the Revit API and refuses to close mid-run.
     /// </summary>
     public static void Pump()
     {

@@ -89,19 +89,71 @@ public class ReviewSubmittalCommand : IExternalCommand
                 return Result.Failed;
             }
 
-            string outputPath = Path.Combine(
-                Path.GetDirectoryName(dlg.FileName) ?? ".",
-                BuildFromPredJsonCommand.SafeFileName(pred.FamilyName, Path.GetFileNameWithoutExtension(dlg.FileName)) + ".rfa");
+            // Same destination as the batch: out\ next to the specs, named
+            // after the input file (collision-proof), so the corrected family
+            // lands where the batch report and the other families already are.
+            string specDir = Path.GetDirectoryName(dlg.FileName) ?? ".";
+            string outDir = Path.Combine(specDir, "out");
+            Directory.CreateDirectory(outDir);
+            string stem = fileLabel.EndsWith(".pred.json", StringComparison.OrdinalIgnoreCase)
+                ? fileLabel.Substring(0, fileLabel.Length - ".pred.json".Length)
+                : Path.GetFileNameWithoutExtension(fileLabel);
+            string outputPath = Path.Combine(outDir,
+                BuildFromPredJsonCommand.SafeFileName(stem, "drawing") + ".rfa");
+
+            // Replacing an existing family file is confirmable (round-4 rule).
+            if (File.Exists(outputPath))
+            {
+                var confirm = new TaskDialog("Apex — Review Submittal")
+                {
+                    MainInstruction = "Replace the existing family file?",
+                    MainContent = $"{outputPath}\n\nalready exists (probably from an earlier batch) " +
+                        "and will be replaced by this corrected build.",
+                    CommonButtons = TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No,
+                    DefaultButton = TaskDialogResult.No,
+                };
+                if (confirm.Show() != TaskDialogResult.Yes)
+                {
+                    TaskDialog.Show("Apex — review saved",
+                        $"Your corrections are saved in {fileLabel}; nothing was built. " +
+                        "Run Batch Build (or Build Family) when ready.");
+                    return Result.Succeeded;
+                }
+            }
 
             BuildFromPredJsonCommand.BuildOutcome outcome =
                 BuildFromPredJsonCommand.BuildToFile(app, pred, templatePath, outputPath);
 
+            string checks = outcome.Flex.Width && outcome.Flex.Depth && outcome.Flex.Height && outcome.Flex.Centered
+                ? "geometry checks: all passed"
+                : "geometry checks: NOT all passed — treat the family as suspect and send the run log to support";
             ApexLog.Info($"Review: rebuilt {fileLabel} → {outcome.OutputPath} " +
                 $"(params {outcome.ParamsValued}/{outcome.ParamsAdded}, flex W={outcome.Flex.Width} " +
                 $"D={outcome.Flex.Depth} H={outcome.Flex.Height} centered={outcome.Flex.Centered}).");
+
+            // Keep the customer's record honest: if a batch report exists in
+            // out\, append the correction so the kept artifact reflects what
+            // actually stands on disk now.
+            try
+            {
+                string reportPath = Path.Combine(outDir, "BUILD_REPORT.md");
+                if (File.Exists(reportPath))
+                {
+                    File.AppendAllText(reportPath,
+                        $"\n> UPDATE {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC: `{fileLabel}` was corrected in " +
+                        $"Review Submittal and rebuilt → `out/{Path.GetFileName(outputPath)}` ({checks}). " +
+                        "This supersedes the row above for that drawing.\n");
+                }
+            }
+            catch (Exception ex)
+            {
+                ApexLog.Warn("Could not append the correction to BUILD_REPORT.md: " + ex.Message);
+            }
+
             TaskDialog.Show("Apex — family built",
                 $"Built with your corrections:\n{outcome.OutputPath}\n\n" +
                 $"Values set on {outcome.ParamsValued} of {outcome.ParamsAdded} parameters.\n" +
+                $"Checks: {checks}.\n" +
                 $"Run log: {run.Path ?? "(daily Apex log)"}");
             return Result.Succeeded;
         }

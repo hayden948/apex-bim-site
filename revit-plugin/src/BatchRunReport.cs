@@ -153,7 +153,7 @@ public static class BatchRunReport
     {
         int built = rows.Count(r => r.BuildOk);
         int failed = rows.Count - built;
-        int review = rows.Count(r => r.BuildOk && (r.ValidateWarnings > 0 || r.LowConfidenceFields.Length > 0));
+        int review = rows.Count(NeedsReview);
 
         var sb = new StringBuilder();
         sb.AppendLine("# Family build report");
@@ -185,6 +185,9 @@ public static class BatchRunReport
                 if (!string.IsNullOrWhiteSpace(r.SizeSummary)) sb.AppendLine($"- Size: {r.SizeSummary}");
                 sb.AppendLine($"- Values set: {r.ParamsValued} of {r.ParamsAdded} parameters");
                 sb.AppendLine($"- Build checks: {FlexSummary(r)}");
+                if (!FlexOk(r))
+                    sb.AppendLine("- What to do: rebuild just this item (Review Submittal → Save and Build); " +
+                        "if the checks fail again, do not use the family — send the run log to support.");
                 if (r.LowConfidenceFields.Length > 0)
                 {
                     sb.AppendLine($"- **Check these values** (the extraction was less than " +
@@ -239,6 +242,18 @@ public static class BatchRunReport
         }
         return names.ToArray();
     }
+
+    /// <summary>All four geometry checks passed on a built row.</summary>
+    public static bool FlexOk(Row r) => r.FlexWidth && r.FlexDepth && r.FlexHeight && r.Centered;
+
+    /// <summary>
+    /// A built row the modeler should look at before using the family:
+    /// extraction notes, low-confidence values, or failed geometry checks.
+    /// Shared by the report headline, the progress window, and the batch
+    /// summary so "needs review" means the same thing everywhere.
+    /// </summary>
+    public static bool NeedsReview(Row r)
+        => r.BuildOk && (r.ValidateWarnings > 0 || r.LowConfidenceFields.Length > 0 || !FlexOk(r));
 
     private static string FlexSummary(Row r)
     {
