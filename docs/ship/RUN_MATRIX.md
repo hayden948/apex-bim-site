@@ -40,7 +40,10 @@ Success counts above are exhaustive over their input sets; no attempted input wa
 | 13 | customer report generator (BuildCustomerReport) | 3-row mixed batch + all-failed batch + jsonl row | 13/13 asserts pass incl. no-jargon/no-stack-trace guard and threshold anti-drift | R4 C2 suite paste |
 | 14 | per-run log lifecycle (ApexLog.BeginRun) | live writes on this container's filesystem | 5/5 asserts pass: file created, line teed, closed line, post-close isolation | R4 C2 suite paste |
 | 15 | negative control: threshold drift (report 0.7 vs review 0.8) | deliberate constant change, fresh compile | suite FAILS with 2 named failures; revert → ALL TESTS PASSED | R4 C3 (both outputs pasted) |
-| 16 | sample BUILD_REPORT.md from the real generator | 5 rows mirroring the walkthrough scenario (2 built, 3 failure classes) | report generated, committed as docs/ship/SAMPLE_BUILD_REPORT.md | R4 C3 |
+| 16 | sample BUILD_REPORT.md from the real generator | committed golden + demo fixtures fed through the real parser/validator (8 rows; build outcomes synthetic, banner states which) | committed as docs/ship/SAMPLE_BUILD_REPORT.md | R4 C3, regenerated C5 |
+| 17 | V2 adversarial pass 1 (hostile first-time user, criteria+artifacts only) | round-4 code + docs at 1279d84..b9f4510 | REFUTED, 10 findings; all fixed or dispositioned | R4 C4 |
+| 18 | V2 adversarial pass 2 (charged to refute the fixes) | fixed artifacts at 54e064b..61104a5 | 7 fixes verified incl. EnableWindow exception-path trace; REFUTED on 3 (forced-failure class, Save-and-Build warning path, sample-vs-fixture drift) → all fixed | R4 C5 |
+| 19 | consistency check unit-awareness | 610 mm vs 24 in (agree), 0 in (warn), Electrical-group "Width" (ignored) | 3/3 asserts pass | R4 C5 suite (199 total) |
 
 ## HUMAN-VERIFY-REQUIRED (code shipped + kit shipped; execution needs the Revit machine)
 
