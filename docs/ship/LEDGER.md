@@ -877,3 +877,71 @@ modeler who has never seen this tool… without calling Hayden"):
   dimensions (unit edits work via the model; the window exposes value edits — acceptable
   because unit errors are named by the validator and correctable in the portal). Course
   unchanged otherwise.
+
+### Cycle 3 (T0+18 → T0+45) — toolchain integrity incident, negative control, sample report, V1
+
+**Toolchain incident (found by the negative control, fixed, evidence below).** The V3 negative
+control (deliberately desync the report threshold 0.8→0.7, expect the suite to fail) FAILED to
+revert cleanly: the suite kept failing after the constant was restored. Root cause: the tests
+build referenced BOTH WindowsBase.dll from the core net8 ref pack (16 KB compat stub, no
+types) AND the real one from the WindowsDesktop pack (106 KB) — csc's identity resolution for
+the duplicate went flaky (CS7069) once the new WPF windows joined the compile, and the build
+script's `| head` swallowed csc's exit status, so failed compiles silently re-ran the STALE
+test dll. Consequence for earlier claims: the plugin dlls were genuinely written by csc at
+20:08 (a dll only appears on successful compile — verified by mtime), but intermediate suite
+runs in cycle 2 may have executed a stale binary. Fix (scratchpad build scripts, not repo):
+skip the stub WindowsBase, write csc output to a log, abort BEFORE running tests if the
+compile fails, and delete the previous test dll first so a stale run is impossible. Then
+everything was re-proven from fresh compiles:
+
+```
+net48 csc exit: 0 (dll present: yes)
+net8 csc exit: 0 (dll present: yes)
+$ build-tests | grep -c ^PASS         -> 165
+$ build-tests | grep FAIL|ALL TESTS   -> ALL TESTS PASSED
+```
+
+**Negative control, re-run with guaranteed-fresh compiles (pasted):**
+
+```
+[threshold 0.7]  FAIL  report: low-confidence threshold shared with the review model (no silent drift)
+                 FAIL  report: low-confidence values surfaced by name with the threshold
+                 2 FAILURES
+[reverted 0.8]   ALL TESTS PASSED
+```
+
+The round-4 tests are proven able to fail. Working tree confirmed clean after revert
+(`git diff --stat` empty).
+
+**Sample customer report generated from the real generator** (Revit-free demo harness feeding
+`BuildCustomerReport` rows that mirror the walkthrough scenario): committed as
+`docs/ship/SAMPLE_BUILD_REPORT.md` (commit b9f4510). One defect found by reading the output as
+a customer — headline grammar "1 built but list values" — fixed and re-verified in the same
+commit. RUN_MATRIX gains rows 12–16 (round-4 executed section).
+
+**Walkthrough checklist shipped**: `revit-plugin/deploy/WALKTHROUGH.md` — one page, ~20 min,
+setup → batch (incl. two planted failures) → override demo (zero-depth class) → honest-failure
+spot checks (mid-batch failure message quality; template-missing machine blame) → the exact
+evidence bundle to send back (newest Revit journal, run-*.log files, BUILD_REPORT.md,
+RUN_MATRIX.md, quarantine markers). Every checkbox is HUMAN-VERIFY-REQUIRED.
+
+**V1 self-review — claims I cannot back from this container, stated before V2:**
+
+1. The Render-priority dispatcher pump repaints without input re-entrancy UNDER REVIT'S
+   message loop — reasoned from WPF dispatcher semantics, never executed in Revit. Walkthrough
+   step 4 is the check; if the window never paints, the batch still completes (paint failures
+   are caught, logged, counted).
+2. Whether a first-time modeler actually understands the dialogs/report is an empirical UX
+   question — walkthrough step 11 asks it explicitly instead of assuming it.
+3. TaskDialog rendering with long MainContent strings (confirmation + summary dialogs) is
+   unverified visually.
+4. Window ownership via MainWindowHandle across Revit versions — try/catch'd; degraded mode is
+   center-screen, not a crash.
+5. "6 of 8 build" in the walkthrough is an EXPECTATION for the golden set on a configured
+   machine, not a claim; per-drawing truth comes from the operator's RUN_MATRIX.
+6. The suite exercises the review MODEL, not the WPF window's event handlers; the window's
+   Apply/Save wiring is code-reviewed only (thin: ApplyEdits→TrySet, SaveNow→TrySave).
+
+V2 launched: ship-reviewer charged as a hostile first-time CVE modeler walking load → select →
+review → build → read report, given ONLY the brief's criteria + the artifacts (code, walkthrough,
+sample report, tests) — no author conclusions.

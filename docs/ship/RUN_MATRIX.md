@@ -1,4 +1,4 @@
-# Round 3 run matrix — what was actually executed, on what, with what result
+# Rounds 3–4 run matrix — what was actually executed, on what, with what result
 
 Scope honesty, stated first: **zero Meta EMT 11990 drawings are reachable from this
 environment** (new-inputs check pasted in LEDGER Round 3 Cycle 1), and **Revit cannot execute
@@ -32,6 +32,16 @@ here** (Linux container, no Revit — LEDGER Round 1). Therefore:
 
 Success counts above are exhaustive over their input sets; no attempted input was omitted.
 
+## Round 4 executed here (all Revit-free; suite runs are fresh-compile — see LEDGER R4 C3 for the toolchain fix that guarantees it)
+
+| # | stage under test | input | result | evidence (LEDGER R4) |
+|---|---|---|---|---|
+| 12 | review/override core (SpecReviewModel): load → flag low confidence → reject invalid → correct → save with .bak | crafted zero-depth low-confidence spec; nq430 golden; broken JSON; kind-preservation spec | 25/25 asserts pass incl. save-refuses-invalid and .bak-never-overwritten | R4 C2 suite paste |
+| 13 | customer report generator (BuildCustomerReport) | 3-row mixed batch + all-failed batch + jsonl row | 13/13 asserts pass incl. no-jargon/no-stack-trace guard and threshold anti-drift | R4 C2 suite paste |
+| 14 | per-run log lifecycle (ApexLog.BeginRun) | live writes on this container's filesystem | 5/5 asserts pass: file created, line teed, closed line, post-close isolation | R4 C2 suite paste |
+| 15 | negative control: threshold drift (report 0.7 vs review 0.8) | deliberate constant change, fresh compile | suite FAILS with 2 named failures; revert → ALL TESTS PASSED | R4 C3 (both outputs pasted) |
+| 16 | sample BUILD_REPORT.md from the real generator | 5 rows mirroring the walkthrough scenario (2 built, 3 failure classes) | report generated, committed as docs/ship/SAMPLE_BUILD_REPORT.md | R4 C3 |
+
 ## HUMAN-VERIFY-REQUIRED (code shipped + kit shipped; execution needs the Revit machine)
 
 - Per-drawing build results, wall times, and build-stage failure counts (`BatchBuildCommand`
@@ -40,6 +50,10 @@ Success counts above are exhaustive over their input sets; no attempted input wa
   differ at byte level — Revit embeds GUIDs/timestamps — outcome columns must not).
 - The plugin's named-field failure dialog rendering, quarantine files on a real disk, and the
   journal-replay path (needs the one-time recording, see run-batch.ps1 header).
+- Round 4 in-Revit surfaces: ribbon rendering, confirmation dialogs, the progress window's
+  Render-priority repaint under Revit's message loop, the review dialog, and the full
+  first-time-user path — the verification vehicle is `revit-plugin/deploy/WALKTHROUGH.md`
+  (one page, ~20 min, journal + run logs are the returned evidence).
 
 ## BLOCKED-ON-OPERATOR (cannot be produced from here at all)
 
