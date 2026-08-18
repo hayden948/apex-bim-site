@@ -162,7 +162,11 @@ public static class BatchRunReport
         sb.AppendLine();
         sb.AppendLine($"**{built} of {rows.Count} drawings built into Revit families.** " +
             (failed > 0 ? $"{failed} failed — each failed item below says what to do next. " : "") +
-            (review > 0 ? $"{review} built but list values worth double-checking before the families are used." : ""));
+            (review > 0
+                ? (review == 1
+                    ? "1 built family lists values worth double-checking before use."
+                    : $"{review} built families list values worth double-checking before use.")
+                : ""));
         sb.AppendLine();
         sb.AppendLine("Keep this file with the .rfa files: it records what was built, from which");
         sb.AppendLine("drawing, and with which values, so the result can be defended without");
