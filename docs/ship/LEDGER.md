@@ -1080,3 +1080,92 @@ ParamsValued exceed ParamsAdded in real runs (display nuance, operator matrix wi
 "whether the auto-created Apex_* parameters actually flex" remains the walkthrough's job.
 
 Third V2 pass launched, scoped to exactly these 10 fixes + regressions they could introduce.
+
+### Cycle 6 (T0+70 → T0+80) — third V2 pass, final fixes, V3 gate
+
+Third V2 pass (scoped to the second-pass fixes): **9 of 10 claims verified as present and
+coherent** — including byte-checking the sample's failure text against the committed corrupt
+fixture with `od`, and confirming the walkthrough/checklist/message wording all agree on the
+forced-failure scenario. **REFUTED on exactly one finding**: the SIBLING "review saved" dialog
+(the No-on-replace-confirm path) still said "Run Batch Build (or Build Family) when ready" —
+the routing defect claimed fixed, alive in a second dialog the fix commit never touched. Two
+minor: the sample banner mislabeled "Values set" counts as real (they are build outcomes), and
+`JsonNode.Parse` throws ArgumentException on duplicate keys (JsonDocument tolerates them) —
+swallowed in the batch but an unhandled crash in the review command.
+
+All three fixed in commit 987c3bf: sibling dialog routes to Save-and-Build/Batch Build
+(grep: 0 remaining "Build Family) when ready", 2 Save-and-Build routings); `SpecReviewModel.Load`
+catches ALL parse failures → LoadError (duplicate-key regression test added); banner moves
+"Values set" to the synthetic side with the valued-can-exceed-added explanation. The one-line
+dialog fix was verified by direct inspection + grep + suite rather than a fourth adversarial
+pass — proportionate to a single string change; stated here rather than hidden.
+
+**Final V3 gate (pasted, 21:09 UTC):**
+
+```
+net48 csc exit: 0 (dll present: yes)
+net8 csc exit: 0 (dll present: yes)
+ALL TESTS PASSED        (200 assertions, fresh compile guaranteed)
+$ python3 docs/ship/check_register.py
+REGISTER CHECK PASSED: 16 evidenced rows, T0 present, no banned words, coverage terms present.
+```
+
+Independent toolchain: **Windows CI (real SDK + WPF, runs the test project) green through
+run 24 = commit fb5fbe3**; run 25 (987c3bf, one dialog string + one catch clause + banner
+text) in progress at write time — result to be confirmed before round close below.
+
+#### ROUND 4 EXIT status
+
+Brief's goal: a CVE modeler who has never seen this tool can load a submittal, build
+families, understand what happened, and fix what failed — without calling Hayden.
+
+- **Work item 1 (ribbon/commands, customer language, confirmable destruction): BUILT.**
+  Submittals panel (Review Submittal / Build Family / Batch Build) with zero-document
+  availability; jargon purged from tooltips, dialogs, validator messages (repo paths and
+  codenames removed; tested); batch/single/review overwrites all confirmable (default No).
+- **Work item 2 (batch dialog, per-item progress/result/summary): BUILT.** Per-item ✓/⚠/✗
+  with one shared needs-review definition; honest threading: API calls never leave the API
+  thread, Revit's window disabled for the pumped run (modal semantics), close-guarded window,
+  ghosting stated. ExternalEvent modeless UI remains logged DEBT.
+- **Work item 3 (review & override): BUILT + PROVEN at the model layer.** Confidence-flagged
+  field grid (Apex_-aware), value+unit edits, validator-gated save with as-delivered .bak,
+  unit-aware consistency cross-check on Check values / Save / Save-and-Build, rebuild of
+  exactly that item into out\ with a report UPDATE line.
+- **Work item 4 (customer-kept report): BUILT + sample committed** (fixture-true inputs,
+  synthetic outcomes labeled) — per-item what-was-built/from-which-drawing/with-which-values/
+  which-checks-passed + what-to-do per failure class, no jargon (tested).
+- **Work item 5 (one log per run): BUILT + PROVEN** (lifecycle tested; every dialog and the
+  report footer name the file).
+- **EXIT 1 (clean-Revit-2025 walkthrough evidenced by journal + run log):
+  HUMAN-VERIFY-REQUIRED by design** — `revit-plugin/deploy/WALKTHROUGH.md` (12 checkboxes,
+  ~25 min, evidence bundle specified). No walkthrough has executed; nothing here claims it
+  has.
+- **EXIT 2 (override on a real round-3 parser miss): demonstrated on the real miss CLASS**
+  (zero dimension + low confidence — the nq430 depth-miss class; no real CVE drawings exist
+  anywhere, per every round's new-inputs check), end-to-end at the model layer in the suite,
+  in-Revit via walkthrough steps 7–8 with the committed demo fixture.
+- **EXIT 3 (forced mid-batch failure → clear message + usable log): the Revit-free slices are
+  PROVEN** (classification, message text, quarantine naming, per-run log capture — suite);
+  the deterministic read-only path is BUILT with checklist/walkthrough coherence; in-Revit
+  execution is walkthrough step 9.
+- **Triple verification: V1 (C3, six unbackable claims), V2 ×3 (REFUTED → 10 findings fixed;
+  REFUTED → 10 more fixed; REFUTED → 1 + 2 minor fixed) — the hostile-first-time-user charge
+  produced real defects every pass, including one (flex checks failing on 5/6 fixtures) that
+  invalidated this round's own first sample artifact. V3: 200 assertions green from fresh
+  compiles + independent Windows CI.**
+
+THE BLUNT SENTENCE, unchanged in kind from round 3: everything above is code-and-document
+truth; not one pixel of this UX has been seen by a human, and the walkthrough bundle
+(journal + run logs + report) is the only thing that converts this round's claims into
+customer-facing facts.
+
+HANDOFF for round 5 (and operator):
+- Hayden: run `revit-plugin/deploy/WALKTHROUGH.md` on clean Revit 2025 (~25 min) and send the
+  bundle; that closes rounds 3–4 HUMAN-VERIFY items in one sitting.
+- Operator still owes: CVE drawings via data gate #11, Sprint 001 fixtures, CVE's pinned Revit
+  version, briefing docs, TELEGRAM_BOT_TOKEN, shop2revit archive.
+- DEBT carried: ExternalEvent modeless progress; category→template mapping (hidden-ahu9 is
+  Mechanical Equipment silently built on the electrical template); parameter-value range
+  semantics (schema v1.1); undocked-view-window EnableWindow coverage; per-field provenance
+  (v1.1).
+- Round 5 as briefed (packaging/rehearsal) should consume the walkthrough results FIRST.
