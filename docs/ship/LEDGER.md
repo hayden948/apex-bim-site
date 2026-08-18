@@ -643,3 +643,25 @@ PROVEN (pasted this cycle):
 (c) Avoiding because hard? Journal replay cannot be armed from here (requires one recorded
     run on a real Revit); said so in run-batch.ps1 and the checklist rather than shipping a
     journal line I cannot verify. The alternative one-click path is documented and honest.
+
+### Cycle 5 — triple verification
+
+V1 SELF — claims I cannot back with executed output (explicit list):
+1. BatchBuildCommand's in-Revit behavior (dialog-free under APEX_BATCH_DIR, quarantine files
+   on a real disk, batch continuing across a real Revit-API failure) — the logic compiles for
+   both targets and its Revit-free half is fully tested, but no execution here. Marked
+   HUMAN-VERIFY-REQUIRED in RUN_MATRIX.md, checklist step 5–6.
+2. BuildToFile's partial-.rfa deletion presumes Revit's SaveAs can leave a partial file worth
+   deleting; the delete-on-catch path has never run against a real failing SaveAs.
+3. journal-template.txt replay viability — deliberately shipped UNARMED (placeholder + one-time
+   recording procedure); cannot be validated from here.
+4. run-batch.ps1 — never executed (no Windows/PowerShell in this container); reviewed only.
+All four fall inside the HUMAN-VERIFY-REQUIRED block; none is reported as done.
+
+V2 ADVERSARIAL — ship-reviewer launched with the round-brief charge: is any reported number an
+artifact of tuning, was the holdout truly untouched (here: truly blocked, not simulated), do
+the containment claims match the code. Verdict recorded below on return.
+
+V3 EMPIRICAL — final gate re-run after all edits (pasted): both targets compile with zero
+errors, `ALL TESTS PASSED`, `EXTRACTION_SCHEMA PARITY OK`, `REGISTER CHECK PASSED: 16 rows`.
+Work pushed as 2b1e672 (11 files, +713/−30) at 19:38 UTC (T0+68min).
