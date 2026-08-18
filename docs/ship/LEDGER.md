@@ -1025,3 +1025,58 @@ V1 predicted ignorance (in-Revit behavior) plus one class V1 missed entirely (th
 parameter lists vs the flex checks — an integration seam between two rounds' code). Remaining
 time goes to: V2 re-verification of the fixes (fresh hostile pass), final V3 gate, EXIT
 entry + handoff. No scope changes.
+
+### Cycle 5 (T0+55 → T0+70) — V2 re-review: REFUTED again; second fix pass
+
+The re-verification pass (fresh hostile reviewer, charged to refute the FIXES) confirmed 7 of
+the 10 fixes as present and coherent — including tracing every exception path around the
+EnableWindow change and finding "no reachable path that leaves Revit disabled" — and REFUTED
+on the rest. Its core sentence: "the forced-failure fix (claim 8) is specified against a
+failure classification the shipped classifier cannot produce and manufactures the exact
+on-disk state the operator checklist defines as a reportable containment bug."
+
+Disposition (fixes in commit fb5fbe3, suite now 199 assertions, ALL TESTS PASSED):
+
+1–2. **Forced-failure class mismatch + containment-bug paradox — CONFIRMED, FIXED
+   deterministically.** Instead of guessing which exception Revit's SaveAs throws at a
+   read-only target (unknowable from here), the batch now fails the item BEFORE any Revit
+   call: an unremovable stale output (IOException/UnauthorizedAccessException on the
+   fresh-run delete) is a hard Environment failure whose message names the surviving old
+   file and the fix. Walkthrough step 9 now expects exactly that message; the operator
+   checklist carves out this one legitimate FAIL-row-with-a-file case. (Linux cannot
+   reproduce read-only-delete semantics — Windows denies, POSIX allows via directory
+   permissions — so this path's execution is HUMAN-VERIFY step 9; the classification logic
+   itself is plain .NET, reviewed.)
+3. **Consistency warning invisible on the default Save-and-Build path — CONFIRMED, FIXED.**
+   A non-empty ConsistencyWarnings now pops a Yes/No (default No) with the disagreement on
+   screen before the build; No keeps the review open.
+4. **Sample contradicted the fixtures it claimed to mirror — CONFIRMED, FIXED at the root.**
+   The generator now READS the committed fixtures: names, sizes, parameter counts,
+   low-confidence flags, and both failure messages are produced by the real
+   parser/validator; only build outcomes are synthetic and the banner says exactly which.
+   (The real corrupt-file message differs from the invented one — "0x0A is invalid within a
+   JSON string", not the guessed text — proving the reviewer's point.)
+5. **EnsureDimensionParameters overwrote spec-supplied values — CONFIRMED, FIXED.** Existing
+   parameters are left untouched (logged); geometry-vs-parameter disagreement is now also
+   surfaced in BATCH runs (counted into needs-review + logged with field names), so the
+   mismatch class is visible outside the review window too.
+6. **Enum names on the progress window — CONFIRMED, FIXED** via
+   `BatchRunReport.CustomerClass` (tested for all classes); RUN_MATRIX/jsonl keep the
+   taxonomy by design (operator artifacts).
+7. **Tautological test — CONFIRMED, FIXED** with explicit clean-row negative +
+   low-confidence positive cases.
+8. **Unit/group-blind consistency check — CONFIRMED, FIXED.** Comparison in feet via
+   UnitConv (610 mm vs 24 in agree; tested), Dimensions-group only (Electrical "Width"
+   ignored; tested), tolerance 0.005 ft.
+9. **"Review saved" dialog routed around fixes 3/4 — CONFIRMED, FIXED**: it now points to
+   Save-and-Build / Batch Build (both land in out\ and keep the report current).
+10. **journal-template M1 — CONFIRMED, FIXED** (the ledger's earlier "last M1 fixed" claim
+   was wrong; this entry corrects it).
+
+Residuals stated by the reviewer and accepted with reasons: EnableWindow disables Revit's
+MAIN frame only — undocked view windows are separate top-levels (in-Revit truth; walkthrough
+step 4 observes overall behavior); template built-ins (Manufacturer/Model) may make
+ParamsValued exceed ParamsAdded in real runs (display nuance, operator matrix will show it);
+"whether the auto-created Apex_* parameters actually flex" remains the walkthrough's job.
+
+Third V2 pass launched, scoped to exactly these 10 fixes + regressions they could introduce.
