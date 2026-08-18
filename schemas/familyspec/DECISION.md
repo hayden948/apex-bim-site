@@ -51,17 +51,23 @@ The canonical interchange contract for "what a drawing extraction says about a f
   ports its output to v1 (deliberately NOT done this round — read-only repo, and porting a
   stubbed service is round-3+ scope if the operator wants P-B alive at all).
 - Legacy accommodation (documented, deliberate, the only one): files/rows written before v1
-  lack `schema_version`. Validators treat a MISSING version as "legacy v0", emit a visible
-  warning naming the file, and stamp `"1.0"` on the stored copy where they own storage (API).
-  An UNKNOWN version (e.g. "2.0") is a hard reject. This keeps the Sprint 001 fixture net
-  usable; it is not a silent default — the warning names the file and the field.
+  lack `schema_version`. Validators treat a MISSING version as "legacy v0" and surface every
+  accommodation (missing unit, missing is_instance, unknown fields) as a named warning — in
+  the plugin dialog/log, and in the API's audit_log (`legacy_v0_accommodations`). Stamping
+  policy (tightened after the round-2 adversarial review): `"1.0"` is stamped ONLY onto a
+  document that passes the STRICT v1 rules; a v0 document that needs accommodations is
+  processed UNSTAMPED so the stored population never contains a doc that claims v1 but
+  violates the schema. An UNKNOWN version (e.g. "2.0") is a hard reject, and the same
+  policy applies to AFIS at the plugin build boundary (`AfisRevitMapper.SupportsAfisVersion`).
+  Known residual: the quarantined shop2revit schema also uses the identifier "1.0" for a
+  different shape — validators name it as a wrong-contract when its telltale fields appear.
 
 ## Enforcement points installed this round
 
 | Boundary | Mechanism |
 |---|---|
 | Schema ↔ C# DTOs | Contract test in `revit-plugin/tests/TestMain.cs` reflecting `[JsonPropertyName]` attrs against the schema file's properties/required/enums — fails the suite on any divergence (codegen judged not viable in-round: no offline NJsonSchema toolchain in the container; recorded as debt) |
-| Schema ↔ API `EXTRACTION_SCHEMA` | `schemas/familyspec/check_extraction_schema.py` extracts the TS literal and deep-compares to the schema file — run in CI/test loops |
+| Schema ↔ API `EXTRACTION_SCHEMA` | `schemas/familyspec/tools/check_extraction_schema.py` extracts the TS literal and deep-compares to the schema file — wired into `.github/workflows/deploy-api.yml` as a pre-deploy gate |
 | Extraction output (before write) | `api/index.ts` validates the model's result against the v1 rules before storing `claude_result`; invalid → extraction `failed` with a named-field message |
 | Correction input (before write) | approve body `{result}` validated the same way; invalid → `400 INVALID_CORRECTION` naming field + value |
 | Add-in input (before build) | `PredValidator.cs` runs before any Revit API call; invalid → dialog naming file + field + expected/got, never a stack trace |

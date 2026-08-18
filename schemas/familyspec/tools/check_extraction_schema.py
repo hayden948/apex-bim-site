@@ -88,6 +88,12 @@ def main() -> int:
     seteq(ext["properties"]["geometry"]["required"],
           ref["properties"]["geometry"]["required"], "geometry required")
 
+    # geometry.primitive: schema const must equal the extraction enum's single value.
+    ref_prim = ref["properties"]["geometry"]["properties"]["primitive"].get("const")
+    ext_prim = ext["properties"]["geometry"]["properties"]["primitive"].get("enum")
+    if ext_prim != [ref_prim]:
+        errors.append(f"geometry.primitive differs: extraction enum {ext_prim} vs schema const {ref_prim!r}")
+
     e_par = ext["properties"]["parameters"]["items"]
     r_par = ref["properties"]["parameters"]["items"]
     seteq(e_par["properties"].keys(), r_par["properties"].keys(), "parameter properties")

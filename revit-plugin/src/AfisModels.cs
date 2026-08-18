@@ -8,7 +8,9 @@ namespace Apex.BimStudio;
 
 public class AfisObject
 {
-    [JsonPropertyName("afis_version")] public string AfisVersion { get; set; } = "1.0.0";
+    // No default: an absent afis_version must be DETECTABLE (readers reject
+    // unknown/missing versions at the build boundary; a default would mask it).
+    [JsonPropertyName("afis_version")] public string? AfisVersion { get; set; }
     [JsonPropertyName("id")] public string Id { get; set; } = "";
     [JsonPropertyName("tier")] public string Tier { get; set; } = "type";
     [JsonPropertyName("identity")] public Identity Identity { get; set; } = new Identity();

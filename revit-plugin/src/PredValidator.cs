@@ -96,9 +96,10 @@ public static class PredValidator
         else
         {
             CheckUnknown(geom, GeometryProperties, "geometry.", source, r);
+            // Exact match: the schema of record is const "box" (case-sensitive).
             if (!geom.TryGetProperty("primitive", out JsonElement prim)
                 || prim.ValueKind != JsonValueKind.String
-                || !string.Equals(prim.GetString(), "box", StringComparison.OrdinalIgnoreCase))
+                || !string.Equals(prim.GetString(), "box", StringComparison.Ordinal))
             {
                 r.Errors.Add($"{source}: geometry.primitive must be \"box\" " +
                     $"(got {(geom.TryGetProperty("primitive", out JsonElement p2) ? Raw(p2) : "nothing")}). " +
@@ -236,13 +237,21 @@ public static class PredValidator
             r.Errors.Add($"{source}: {label}.{prop} must be one of {string.Join(", ", allowed)} (got {Raw(v)}).");
     }
 
+    // Telltale keys of the quarantined shop2revit FamilySpec, which claims the
+    // same "1.0" identifier for a different shape — name the wrong contract
+    // instead of producing field-soup errors.
+    private static readonly string[] Shop2RevitKeys = { "product_type", "source", "bill_of_materials", "series" };
+
     private static void CheckUnknown(JsonElement obj, string[] known, string prefix, string source, Result r)
     {
         foreach (JsonProperty p in obj.EnumerateObject())
         {
             if (known.Contains(p.Name)) continue;
-            string msg = $"{source}: unknown field '{prefix}{p.Name}' — not part of FamilySpec v{Version}. " +
-                "Remove it, or check for a typo against schemas/familyspec/familyspec.v1.schema.json.";
+            string msg = prefix.Length == 0 && Shop2RevitKeys.Contains(p.Name)
+                ? $"{source}: field '{p.Name}' belongs to the quarantined shop2revit FamilySpec, not FamilySpec " +
+                  $"v{Version} — wrong contract, see schemas/familyspec/DECISION.md."
+                : $"{source}: unknown field '{prefix}{p.Name}' — not part of FamilySpec v{Version}. " +
+                  "Remove it, or check for a typo against schemas/familyspec/familyspec.v1.schema.json.";
             if (r.IsLegacyV0) r.Warnings.Add(msg);
             else r.Errors.Add(msg);
         }

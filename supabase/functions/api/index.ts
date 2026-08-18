@@ -466,8 +466,10 @@ async function processExtraction(extractionId: string, storageKey: string): Prom
     // deno-lint-ignore no-explicit-any
     const result = extraction.result as any;
     // Boundary: validate the model's output BEFORE it is written anywhere.
-    // The model does not emit schema_version (server-owned field); stamp it.
-    const check = familySpecProblems(result, "extraction result");
+    // The model does not emit schema_version (server-owned field), so validate
+    // a STAMPED copy — that forces the strict v1 rules; the lenient legacy
+    // path must never apply to fresh output (adversarial-review finding 1).
+    const check = familySpecProblems({ ...result, schema_version: FAMILYSPEC_VERSION }, "extraction result");
     if (check.problems.length > 0) {
       const msg = check.problems.join("; ");
       await supabase.from("extractions").update({
@@ -521,30 +523,42 @@ const FS_ROOT_PROPS: string[] = [...Object.keys(FS.properties), "schema_version"
 
 /**
  * Validate a would-be FamilySpec v1 document. Returns named-field problems
- * (empty = valid) plus whether the doc is a legacy v0 (no schema_version —
- * accepted with the documented accommodation; the caller stamps the version).
- * An unknown schema_version is always a problem: every change is breaking.
+ * (empty = valid), the legacy-v0 accommodation warnings (visible, per
+ * DECISION.md — never silent), and whether the doc is legacy (no
+ * schema_version). An unknown schema_version is always a problem: every
+ * change is breaking. Writers must only stamp "1.0" onto documents that
+ * pass STRICT validation (validate a copy with schema_version set) —
+ * lenient-then-stamp would launder invalid docs into the v1 population
+ * (found by the round-2 adversarial review).
  */
 // deno-lint-ignore no-explicit-any
-function familySpecProblems(p: any, source: string): { problems: string[]; legacy: boolean } {
+function familySpecProblems(p: any, source: string): { problems: string[]; warnings: string[]; legacy: boolean } {
   const problems: string[] = [];
+  const warnings: string[] = [];
   const add = (m: string) => problems.push(`${source}: ${m}`);
+  const warn = (m: string) => warnings.push(`${source}: ${m}`);
 
   if (p === null || typeof p !== "object" || Array.isArray(p)) {
     add("document root must be a JSON object");
-    return { problems, legacy: false };
+    return { problems, warnings, legacy: false };
   }
 
   const legacy = !("schema_version" in p);
   if (!legacy && p.schema_version !== FAMILYSPEC_VERSION) {
     add(`schema_version must be "${FAMILYSPEC_VERSION}" (got ${JSON.stringify(p.schema_version)})`);
-    return { problems, legacy };
+    return { problems, warnings, legacy };
   }
 
-  if (!legacy) {
-    for (const k of Object.keys(p)) {
-      if (!FS_ROOT_PROPS.includes(k)) add(`unknown field '${k}' — not part of FamilySpec v${FAMILYSPEC_VERSION}`);
-    }
+  // The quarantined shop2revit FamilySpec claims the same "1.0" identifier
+  // for a different shape — give its telltale keys a contract-level message.
+  const S2R_KEYS = ["product_type", "source", "bill_of_materials", "series"];
+  for (const k of Object.keys(p)) {
+    if (FS_ROOT_PROPS.includes(k)) continue;
+    const msg = S2R_KEYS.includes(k)
+      ? `field '${k}' belongs to the quarantined shop2revit FamilySpec, not FamilySpec v${FAMILYSPEC_VERSION} — wrong contract, see schemas/familyspec/DECISION.md`
+      : `unknown field '${k}' — not part of FamilySpec v${FAMILYSPEC_VERSION}`;
+    if (legacy) warn(msg);
+    else add(msg);
   }
 
   if (typeof p.family_name !== "string" || !p.family_name.trim()) add("family_name must be a non-empty string");
@@ -554,7 +568,8 @@ function familySpecProblems(p: any, source: string): { problems: string[]; legac
   if (p.geometry === null || typeof p.geometry !== "object" || Array.isArray(p.geometry)) {
     add("geometry is required (object with primitive/width/depth/height)");
   } else {
-    if (String(p.geometry.primitive).toLowerCase() !== "box") {
+    // Exact match: the schema of record is const "box" (case-sensitive).
+    if (p.geometry.primitive !== "box") {
       add(`geometry.primitive must be "box" (got ${JSON.stringify(p.geometry.primitive)})`);
     }
     for (const k of ["width", "depth", "height"]) {
@@ -567,7 +582,8 @@ function familySpecProblems(p: any, source: string): { problems: string[]; legac
         add(`geometry.${k}.value must be a number > 0 (got ${JSON.stringify(g.value)})`);
       }
       if (g.unit === undefined) {
-        if (!legacy) add(`geometry.${k}.unit is required (one of ${FS_UNITS.join("/")})`);
+        if (legacy) warn(`geometry.${k}.unit missing — legacy v0 document, inches will be assumed at build time`);
+        else add(`geometry.${k}.unit is required (one of ${FS_UNITS.join("/")})`);
       } else if (!FS_UNITS.includes(g.unit)) {
         add(`geometry.${k}.unit must be one of ${FS_UNITS.join("/")} (got ${JSON.stringify(g.unit)})`);
       }
@@ -586,10 +602,11 @@ function familySpecProblems(p: any, source: string): { problems: string[]; legac
         add(`${label} must be an object`);
         return;
       }
-      if (!legacy) {
-        for (const k of Object.keys(q)) {
-          if (!FS_PARAM_PROPS.includes(k)) add(`unknown field '${label}.${k}' — not part of FamilySpec v${FAMILYSPEC_VERSION}`);
-        }
+      for (const k of Object.keys(q)) {
+        if (FS_PARAM_PROPS.includes(k)) continue;
+        const msg = `unknown field '${label}.${k}' — not part of FamilySpec v${FAMILYSPEC_VERSION}`;
+        if (legacy) warn(msg);
+        else add(msg);
       }
       if (typeof q.name !== "string" || !q.name.trim()) add(`${label}.name must be a non-empty string`);
       if (!FS_SPEC_TYPES.includes(q.spec_type)) {
@@ -598,8 +615,12 @@ function familySpecProblems(p: any, source: string): { problems: string[]; legac
       if (!FS_GROUPS.includes(q.group)) {
         add(`${label}.group must be one of ${FS_GROUPS.join(", ")} (got ${JSON.stringify(q.group)})`);
       }
-      if (typeof q.is_instance !== "boolean" && !(legacy && q.is_instance === undefined)) {
-        add(`${label}.is_instance must be true or false (got ${JSON.stringify(q.is_instance)})`);
+      if (typeof q.is_instance !== "boolean") {
+        if (legacy && q.is_instance === undefined) {
+          warn(`${label}.is_instance missing — legacy v0 document, type binding will be assumed`);
+        } else {
+          add(`${label}.is_instance must be true or false (got ${JSON.stringify(q.is_instance)})`);
+        }
       }
       if (!["string", "number", "boolean"].includes(typeof q.value)) {
         add(`${label}.value must be a string, number, or boolean (got ${JSON.stringify(q.value)})`);
@@ -618,7 +639,7 @@ function familySpecProblems(p: any, source: string): { problems: string[]; legac
     add("warnings must be an array of strings");
   }
 
-  return { problems, legacy };
+  return { problems, warnings, legacy };
 }
 
 /**
@@ -1077,26 +1098,60 @@ Deno.serve(async (req: Request) => {
       // deno-lint-ignore no-explicit-any
       let pred = ex.claude_result as any;
       let corrected = false;
-      try {
-        const body = await req.json();
-        if (body?.result && typeof body.result === "object") {
-          const c = familySpecProblems(body.result, `extraction ${shortId(exId)} correction`);
-          if (c.problems.length > 0) {
-            return fail(400, "INVALID_CORRECTION", c.problems[0], { problems: c.problems });
-          }
-          pred = { ...body.result, schema_version: FAMILYSPEC_VERSION };
-          corrected = true;
+      // A non-empty body is a correction attempt and MUST parse and carry
+      // `result` — a typo'd key or broken JSON must never silently approve
+      // the uncorrected result (adversarial-review finding 2). Only an empty
+      // body / {} means "approve the stored result as-is".
+      const rawBody = (await req.text()).trim();
+      if (rawBody && rawBody !== "{}") {
+        // deno-lint-ignore no-explicit-any
+        let body: any;
+        try {
+          body = JSON.parse(rawBody);
+        } catch (e) {
+          return fail(400, "BAD_JSON",
+            `Correction body is not valid JSON: ${e instanceof Error ? e.message : String(e)}`);
         }
-      } catch { /* empty body -> approve the stored result as-is */ }
-      // Boundary: nothing reaches predToAfis without passing v1 validation.
-      // Legacy rows (pre-v1, no schema_version) are accepted and stamped —
-      // the one documented accommodation (schemas/familyspec/DECISION.md).
-      const stored = familySpecProblems(pred, `extraction ${shortId(exId)} result`);
-      if (stored.problems.length > 0) {
-        return fail(422, "INVALID_STORED_RESULT", stored.problems[0], { problems: stored.problems });
+        if (body === null || typeof body !== "object" || Array.isArray(body) || !("result" in body)) {
+          const got = body && typeof body === "object" ? (Object.keys(body).join(", ") || "no keys") : typeof body;
+          return fail(400, "MISSING_RESULT",
+            `Correction body must be {"result": {...}} (got: ${got}). Send an empty body to approve the stored result as-is.`);
+        }
+        if (body.result === null || typeof body.result !== "object" || Array.isArray(body.result)) {
+          return fail(400, "INVALID_CORRECTION", "result must be a JSON object (the corrected FamilySpec document)");
+        }
+        // Corrections are always validated STRICTLY as v1 (stamp a copy if the
+        // client omitted schema_version) — a reviewer edit is fresh authorship,
+        // not a legacy document.
+        const candidate = { ...body.result, schema_version: body.result.schema_version ?? FAMILYSPEC_VERSION };
+        const c = familySpecProblems(candidate, `extraction ${shortId(exId)} correction`);
+        if (c.problems.length > 0) {
+          return fail(400, "INVALID_CORRECTION", c.problems[0], { problems: c.problems });
+        }
+        pred = candidate;
+        corrected = true;
       }
-      if (stored.legacy) pred = { ...pred, schema_version: FAMILYSPEC_VERSION };
-      if (corrected || stored.legacy) {
+      // Boundary: nothing reaches predToAfis without passing v1 validation.
+      // Stamp "1.0" ONLY onto documents that pass the STRICT rules; a legacy
+      // v0 row that needs accommodations is approved UNSTAMPED with the
+      // accommodations made visible in the audit log (DECISION.md; fixes the
+      // lenient-then-stamp laundering found by the adversarial review).
+      const isLegacy = !("schema_version" in pred);
+      const strict = familySpecProblems(
+        { ...pred, schema_version: pred.schema_version ?? FAMILYSPEC_VERSION },
+        `extraction ${shortId(exId)} result`);
+      if (strict.problems.length === 0) {
+        if (isLegacy) pred = { ...pred, schema_version: FAMILYSPEC_VERSION };
+      } else if (isLegacy) {
+        const lenient = familySpecProblems(pred, `extraction ${shortId(exId)} result`);
+        if (lenient.problems.length > 0) {
+          return fail(422, "INVALID_STORED_RESULT", lenient.problems[0], { problems: lenient.problems });
+        }
+        await audit(ctx, "extraction", exId, "legacy_v0_accommodations", { warnings: lenient.warnings });
+      } else {
+        return fail(422, "INVALID_STORED_RESULT", strict.problems[0], { problems: strict.problems });
+      }
+      if (corrected || (isLegacy && strict.problems.length === 0)) {
         await supabase.from("extractions").update({ claude_result: pred }).eq("id", exId);
         if (corrected) await audit(ctx, "extraction", exId, "extraction_corrected");
       }

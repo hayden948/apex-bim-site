@@ -481,3 +481,74 @@ V1 SELF — claims I cannot back with output produced this round (explicit list)
 V2 ADVERSARIAL — ship-reviewer agent (registered this session) launched with the charge:
 find a code path still reading a non-canonical shape, and a validation bypass. Verdict
 recorded below on return.
+
+### Cycle 5 / ROUND 2 CLOSE — V2 verdict, fixes, wall-clock note
+
+WALL-CLOCK NOTE (protocol rule 1): `date` at this checkpoint reads Tue Aug 18 18:19:36 UTC —
+the session was suspended by the operator mid-round (after the V2 fixes were built and v28
+deployed) and resumed ~20h later. T0+120min passed during the suspension, not during active
+work. Per LOOP.md stop conditions, this entry is the close/handoff: only bookkeeping and the
+already-verified evidence below were added after resume; no new work items were started.
+
+#### V2 ADVERSARIAL verdict: **REFUTED** (7 findings) — triage and disposition
+
+1. Lenient-then-stamp laundering (extraction path ALWAYS lenient; legacy stamp wrote
+   schema-violating "1.0" docs; approve-of-own-data could 422): **FIXED in api v28** —
+   writers validate a STAMPED copy (strict) before stamping; a legacy row that needs
+   accommodations is approved UNSTAMPED with a `legacy_v0_accommodations` audit entry
+   naming every accommodation; familySpecProblems now returns visible warnings.
+2. Malformed/typo'd correction silently discarded → uncorrected result approved:
+   **FIXED in v28** — non-empty body must parse and carry `result`; broken JSON → 400
+   BAD_JSON with the parser position; `{"Result": ...}` → 400 MISSING_RESULT naming the keys.
+3. shop2revit universe alive, same "1.0" identifier, jobs-table collision risk: partially
+   mitigated — both validators now name the wrong contract when its telltale keys appear
+   (`product_type` etc.); the service itself is in the read-only repo → OPERATOR ITEM
+   (archive or point away from the product Supabase project; register row #3 note).
+4. AFIS readers never reject unknown versions: **FIXED** — `AfisRevitMapper.Apply` (the
+   single choke point for both plugin build paths) rejects non-1.x/missing afis_version
+   with a named message; AfisModels no longer masks a missing version with a default.
+5. Parity checker not in CI: **FIXED** — `deploy-api.yml` runs it as a pre-deploy gate;
+   DECISION.md wording corrected.
+6. Contract-test blind spots (types/bounds/consts; case-insensitive primitive):
+   partially fixed — primitive is now case-sensitive in both validators (schema const),
+   parity checker compares the primitive const, tests added (BOX rejected, shop2revit
+   hint, afis version gate). Types/bounds comparison remains DEBT (register row #3 note).
+7. Display readers (console, Telegram) ignore schema_version: accepted as minor —
+   server-side approve still gates; noted, not fixed this round.
+
+#### Live retests against deployed v28 (PROVEN — pasted, reviewer's exact breaking inputs)
+
+Legacy row (no schema_version, no units, no is_instance) on the demo project:
+
+```
+broken-json    -> 400 BAD_JSON "Correction body is not valid JSON: Expected property name..."
+typo-key       -> 400 MISSING_RESULT "Correction body must be {"result": {...}} (got: Result)..."
+legacy-approve -> 201 family created
+stamp-check    -> has_schema_version = false   (legacy row NOT laundered to v1)
+audit-check    -> legacy_v0_accommodations with named warnings
+                  ("geometry.width.unit missing — legacy v0 document, inches will be
+                   assumed at build time", ...)
+re-approve     -> 201 (no 422-on-system-written-data; prior inconsistency gone)
+```
+
+Local gate after fixes (pasted pre-suspension): net48 exit 0, net8 exit 0, ALL TESTS PASSED
+(incl. new BOX-rejected / shop2revit-hint / afis-version-gate asserts), PARITY OK,
+REGISTER CHECK PASSED. Test DB rows fully deleted after the retests (counts pasted).
+
+#### ROUND 2 EXIT status (final)
+
+- Exactly one schema of record: schemas/familyspec/familyspec.v1.schema.json + DECISION.md. MET.
+- Contract test fails on divergence: proven (category→categoryy break + revert, pasted). MET.
+- Golden fixtures round-trip: 6/6 content-identical in-database vs expected/ (normalization
+  documented; the one behavioral difference found — duplicate Apex_AfisId — was investigated
+  as a REGRESSION and fixed in code, not rebaselined). MET.
+- Invalid input → named-field error, demonstrated with real malformed files/payloads:
+  C# fixture suite + live 400s above. MET.
+- Triple verification: V1 (4 unbackable claims listed), V2 REFUTED → findings fixed or
+  dispositioned above, V3 checkers green with demonstrated failure modes. RUN.
+- Deployed: api v28. Committed: 5ded7ac + the close-out commit carrying this entry.
+
+HANDOFF for round 3: first item remains the headless Revit harness (register #2). New
+inputs from this round: PredValidator + AfisRevitMapper.SupportsAfisVersion gate the plugin
+side; roundtrip.py is the regression procedure; V2 residuals = shop2revit archive (operator),
+type/bounds contract-test depth, display-reader version checks.

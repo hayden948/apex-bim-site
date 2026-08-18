@@ -24,6 +24,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Schema-drift gate: the API's EXTRACTION_SCHEMA literal must match the
+      # FamilySpec schema of record before anything deploys.
+      - name: FamilySpec parity check
+        run: python3 schemas/familyspec/tools/check_extraction_schema.py
+
       - name: Check for deploy credentials
         id: creds
         env:

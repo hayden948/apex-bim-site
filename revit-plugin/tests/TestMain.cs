@@ -211,6 +211,21 @@ class TestMain
 
         var arrayRoot = V("[1,2,3]");
         AssertTrue(!arrayRoot.IsValid && arrayRoot.Errors[0].Contains("root"), "non-object root rejected");
+
+        // Adversarial-review follow-ups (round 2 V2 findings 3/4/6):
+        var upperBox = V(valid.Replace(@"""primitive"":""box""", @"""primitive"":""BOX"""));
+        AssertTrue(!upperBox.IsValid && upperBox.Errors.Any(e => e.Contains("primitive")),
+            "primitive is case-sensitive per schema const (BOX rejected)");
+
+        var s2r = V(valid.Replace(@"""family_name"":""F"",", @"""family_name"":""F"",""product_type"":""pad_mount_transformer"","));
+        AssertTrue(!s2r.IsValid && s2r.Errors.Any(e => e.Contains("shop2revit")),
+            "shop2revit-shaped doc named as wrong contract, not field soup");
+
+        AssertTrue(AfisRevitMapper.SupportsAfisVersion("1.0.0"), "afis 1.x supported");
+        AssertTrue(!AfisRevitMapper.SupportsAfisVersion("2.0.0"), "afis 2.x rejected at build boundary");
+        AssertTrue(!AfisRevitMapper.SupportsAfisVersion(null), "missing afis_version rejected at build boundary");
+        var noVer = JsonSerializer.Deserialize<AfisObject>(@"{""id"":""x"",""identity"":{""name"":""N"",""category"":""C""}}", opts)!;
+        AssertTrue(noVer.AfisVersion == null, "absent afis_version stays null (no masking default)");
     }
 
     // ---------- FamilySpec v1: schema-of-record <-> C# contract ----------

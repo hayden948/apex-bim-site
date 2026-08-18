@@ -12,10 +12,23 @@ namespace Apex.BimStudio;
 /// </summary>
 public static class AfisRevitMapper
 {
+    /// <summary>
+    /// AFIS versions this add-in can build. Every change to AFIS is breaking
+    /// (Sprint 002 policy); unknown or missing versions are rejected here —
+    /// the single choke point every build path goes through — with a named
+    /// message instead of a half-built family.
+    /// </summary>
+    public static bool SupportsAfisVersion(string? version)
+        => version != null && version.StartsWith("1.", StringComparison.Ordinal);
+
     public static void Apply(Document famDoc, AfisObject obj)
     {
         if (!famDoc.IsFamilyDocument)
             throw new InvalidOperationException("AfisRevitMapper.Apply requires a family document (Family Editor).");
+        if (!SupportsAfisVersion(obj.AfisVersion))
+            throw new InvalidOperationException(
+                $"AFIS document version '{obj.AfisVersion ?? "(missing)"}' is not supported by this add-in " +
+                "(expected 1.x). Update the add-in, or re-approve the family with a compatible server.");
 
         using var tg = new TransactionGroup(famDoc, "Apex: Build family from AFIS");
         tg.Start();
