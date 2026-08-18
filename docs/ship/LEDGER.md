@@ -552,3 +552,94 @@ HANDOFF for round 3: first item remains the headless Revit harness (register #2)
 inputs from this round: PredValidator + AfisRevitMapper.SupportsAfisVersion gate the plugin
 side; roundtrip.py is the regression procedure; V2 residuals = shop2revit archive (operator),
 type/bounds contract-test depth, display-reader version checks.
+
+---
+
+## ROUND 3 — true success rate + survivable failures (RESTRUCTURED per work-item 0 fallback)
+
+T0 = Tue Aug 18 18:30:36 UTC 2026 (pasted from `date`). Hard stop 20:30:36 UTC.
+State re-read on start: LEDGER tail + register verified on disk; branch at e573d1c.
+
+### Cycle 1 — new-inputs check + restructure decision
+
+NEW-INPUTS CHECK (PROVEN, pasted): `git fetch` both repos — apex-bim-site main unchanged
+(f588c95 + our branch), parser repo HEAD unchanged (269e33f); DB uploads table newest row is
+still nq430-submittal.pdf (2026-08-12). **Zero Meta EMT 11990 drawings are reachable. SPRINT.md
+/ CLAUDE.md / AGENTS.md still not in VCS.** No Revit exists in this container (round-1 harness
+check stands).
+
+RESTRUCTURE (the round brief's own clause: "If a harness truly cannot be built… produce the
+exact run scripts and a step-by-step operator checklist… mark every affected EXIT criterion as
+HUMAN-VERIFY-REQUIRED… never report those items as done"):
+
+Deliverables this round, split by executability:
+A. BUILDABLE HERE (and built): the batch harness CODE — a scriptable plugin batch command
+   (folder of .pred.json → isolated per-drawing build, quarantine, per-drawing JSONL log,
+   RUN_MATRIX generator, deterministic ordering), compiled for both targets and unit-tested in
+   its Revit-free parts; the operator run kit (journal template + PowerShell launcher +
+   step-by-step checklist); QA rules covering the failure classes fixed in rounds 2–3, each
+   proven to fail; API-side determinism + corrupted-input containment proven LIVE.
+B. HUMAN-VERIFY-REQUIRED (marked, not done): any actual .rfa build execution, the per-drawing
+   build results, wall times, and build-stage failure counts.
+C. BLOCKED-ON-OPERATOR (not fabricated): the CVE drawing batch, the 20–30% holdout (minimum 3
+   drawings — we have 0), and therefore THE headline number. Blunt sentence reserved for EXIT.
+
+Honesty note recorded now, before any work: no number produced this round is a success rate on
+Meta EMT 11990 drawings, because none exist here. Anything resembling a rate below refers to
+the named fixture set only and is labeled as such.
+
+### Cycle 2 (18:31 → 18:43 UTC) — batch harness built
+
+Changed: revit-plugin/src/BatchRunReport.cs (new, Revit-free report engine),
+revit-plugin/src/BatchBuildCommand.cs (new: folder batch, per-drawing isolation, quarantine,
+JSONL log, RUN_MATRIX writer, deterministic ordinal ordering, APEX_BATCH_DIR scriptable path),
+BuildFromPredJsonCommand.cs (build core extracted as BuildToFile; partial-.rfa deleted on any
+failure), ApexApplication.cs (ribbon: M1 → Batch Build), TestMain.cs (report-engine tests).
+
+PROVEN (pasted): net48 + net8 compile clean (fresh DLL timestamps 18:43); suite ALL TESTS
+PASSED including: classification table, quarantine naming, jsonl fields, matrix rows,
+taxonomy counts, all-files denominator ("1/3 succeeded (33%)"), honesty disclaimer, empty
+batch. One real intermediate failure caught and fixed (net48 lacks Contains(string,
+StringComparison); invariant P0 formatting) — evidence the suite gates the harness.
+
+### Cycle 3 (18:44 → 19:20 UTC) — operator kit + executable evidence
+
+Changed: revit-plugin/deploy/batch/{OPERATOR_CHECKLIST.md, run-batch.ps1, journal-template.txt}.
+
+PROVEN (pasted this cycle):
+- Parser CLI determinism: two runs on the real NQ430 PDF; diff = ONLY source.extracted_at
+  (provenance timestamp). No geometry/ordering/naming nondeterminism. (Quarantined repo;
+  finding recorded, no fix warranted.)
+- API-half determinism: two identical FamilySpec docs approved through deployed v28 →
+  normalized AFIS jsonb equality TRUE, QA 0.94 = 0.94.
+- Corrupted-input safe fail (live): deliberately corrupt PDF uploaded (201 — upload gate is
+  size/base64 only), extraction 202 → row `failed` in 1433 ms, error_message names the cause
+  ("The PDF specified was not valid" + upstream request id). No other pipeline state touched.
+  Debug-without-reproducing: the row carries status, duration, and cause.
+- All probe rows deleted afterward (counts pasted).
+
+### Cycle 4 (19:20 → 19:36 UTC) — QA anti-regression rules, deployed v29, proven failing
+
+- runQaPipeline gains P-4 (error): >1 Apex_AfisId parameters — the round-2 duplicate-stamp
+  defect can no longer regress silently. Deployed as **api v29**.
+- All three fixed-class rules PROVEN TO FAIL live on crafted bad AFIS (validate endpoint,
+  findings pasted): P-4 on a double-stamp doc ("2 Apex_AfisId parameters — a duplicate stamp
+  would overwrite the family's id at build time"); S-2 on afis_version "2.0.0"; G-1 on a
+  0×0×0 bbox. Probes + parents deleted after (25 validations/3 fams/3 exs/3 ups).
+- Classes fixed in r2/r3 with NO QA rule, and why: lenient-stamp laundering + correction
+  swallowing are pre-AFIS write-path defects — guarded by familySpecProblems and the contract
+  tests, invisible to AFIS-level QA by construction; partial-.rfa containment is plugin-side
+  (BuildToFile delete + quarantine markers), covered by code + operator check step "what
+  failed safely looks like".
+- RunQa guardrail respected: engine structure untouched; one rule added to the existing table.
+
+#### RE-EVALUATION (cycles 2/4 checkpoint)
+
+(a) Highest-value path to EXIT? YES — remaining: RUN_MATRIX.md (written 19:40), triple
+    verification, close.
+(b) Invalidates the starting plan: nothing new — the round was restructured at cycle 1 on the
+    round brief's own fallback clause; everything since has followed that split
+    (BUILDABLE-HERE / HUMAN-VERIFY-REQUIRED / BLOCKED-ON-OPERATOR).
+(c) Avoiding because hard? Journal replay cannot be armed from here (requires one recorded
+    run on a real Revit); said so in run-batch.ps1 and the checklist rather than shipping a
+    journal line I cannot verify. The alternative one-click path is documented and honest.

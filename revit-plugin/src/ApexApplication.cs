@@ -56,8 +56,12 @@ public class ApexApplication : IExternalApplication
             // cloud queue on a timer (config.auto_process_minutes; 0 = off).
             app.Idling += AutoProcessLoop.OnIdling;
 
-            AddButton(Panel(app, "M1"), asm, "ApexBuildFromJson", "Build from JSON", typeof(BuildFromPredJsonCommand),
+            RibbonPanel m1 = Panel(app, "M1");
+            AddButton(m1, asm, "ApexBuildFromJson", "Build from JSON", typeof(BuildFromPredJsonCommand),
                 "Build a family (.rfa) from a local .pred.json extraction");
+            AddButton(m1, asm, "ApexBatchBuild", "Batch Build", typeof(BatchBuildCommand),
+                "Build every .pred.json in a folder with per-drawing isolation, quarantine, and a run matrix " +
+                "(scriptable via APEX_BATCH_DIR)");
 
             RibbonPanel fam = Panel(app, "Families");
             if (ShowPrototypes)

@@ -68,12 +68,22 @@ public class PredDim
 [Transaction(TransactionMode.Manual)]
 public class BuildFromPredJsonCommand : IExternalCommand
 {
-    private struct FlexResult
+    internal struct FlexResult
     {
         public bool Width;
         public bool Depth;
         public bool Height;
         public bool Centered;
+    }
+
+    /// <summary>Result of one family build (shared by the single-file and batch commands).</summary>
+    internal struct BuildOutcome
+    {
+        public int ParamsAdded;
+        public int ParamsValued;
+        public int ParamsTotal;
+        public FlexResult Flex;
+        public string OutputPath;
     }
 
     private enum SpecKind
@@ -166,52 +176,21 @@ public class BuildFromPredJsonCommand : IExternalCommand
             return Result.Failed;
         }
 
-        Document? famDoc = null;
         try
         {
-            famDoc = app.NewFamilyDocument(templatePath);
-            if (famDoc == null)
-            {
-                message = "Revit returned a null family document from the template.";
-                TaskDialog.Show("Apex M1", message);
-                return Result.Failed;
-            }
-
-            int paramsAdded = 0;
-            int paramsValued = 0;
-            FlexResult flex;
-
-            using (var tx = new Transaction(famDoc, "Apex M2: build family from .pred.json"))
-            {
-                tx.Start();
-                try
-                {
-                    FamilyManager fm = famDoc.FamilyManager;
-                    if (fm.CurrentType == null) fm.NewType("Standard");
-                    AddParameters(fm, pred.Parameters, ref paramsAdded, ref paramsValued);
-                    flex = BuildParametricBox(famDoc, pred.Geometry, fm);
-                    tx.Commit();
-                }
-                catch
-                {
-                    if (tx.HasStarted() && !tx.HasEnded()) tx.RollBack();
-                    throw;
-                }
-            }
-
             string outputPath = Path.Combine(
                 Path.GetDirectoryName(inputPath) ?? ".",
                 SafeFileName(pred.FamilyName, Path.GetFileNameWithoutExtension(inputPath)) + ".rfa");
-            famDoc.SaveAs(outputPath, new SaveAsOptions { OverwriteExistingFile = true });
-            ApexLog.Info("Generated family: " + outputPath);
+            BuildOutcome outcome = BuildToFile(app, pred, templatePath, outputPath);
+            ApexLog.Info("Generated family: " + outcome.OutputPath);
 
             var sb = new StringBuilder()
                 .AppendLine("Family generated.")
                 .AppendLine()
-                .AppendLine($"Output: {outputPath}")
+                .AppendLine($"Output: {outcome.OutputPath}")
                 .AppendLine($"Size (in): {Fmt(pred.Geometry.Width)} W × {Fmt(pred.Geometry.Depth)} D × {Fmt(pred.Geometry.Height)} H")
-                .AppendLine($"Parameters added: {paramsAdded} of {pred.Parameters?.Count ?? 0} (values set on {paramsValued})")
-                .AppendLine($"Flexed: Width={YN(flex.Width)}  Depth={YN(flex.Depth)}  Height={YN(flex.Height)}  (centered: {YN(flex.Centered)})");
+                .AppendLine($"Parameters added: {outcome.ParamsAdded} of {outcome.ParamsTotal} (values set on {outcome.ParamsValued})")
+                .AppendLine($"Flexed: Width={YN(outcome.Flex.Width)}  Depth={YN(outcome.Flex.Depth)}  Height={YN(outcome.Flex.Height)}  (centered: {YN(outcome.Flex.Centered)})");
             TaskDialog.Show("Apex M2", sb.ToString());
             return Result.Succeeded;
         }
@@ -221,6 +200,67 @@ public class BuildFromPredJsonCommand : IExternalCommand
             message = "Family generation failed: " + ex.Message;
             TaskDialog.Show("Apex M1", message);
             return Result.Failed;
+        }
+    }
+
+    /// <summary>
+    /// Build one family from a validated FamilySpec and save it to outputPath.
+    /// Shared by the single-file command and BatchBuildCommand. Throws on any
+    /// failure AFTER deleting a partially written .rfa — a caller never finds
+    /// a corrupt file that looks finished (round-3 failure containment).
+    /// </summary>
+    internal static BuildOutcome BuildToFile(Application app, PredFamily pred, string templatePath, string outputPath)
+    {
+        Document? famDoc = null;
+        try
+        {
+            famDoc = app.NewFamilyDocument(templatePath)
+                ?? throw new InvalidOperationException("Revit returned a null family document from the template.");
+
+            int paramsAdded = 0;
+            int paramsValued = 0;
+            FlexResult flex;
+
+            using (var tx = new Transaction(famDoc, "Apex: build family from .pred.json"))
+            {
+                tx.Start();
+                try
+                {
+                    FamilyManager fm = famDoc.FamilyManager;
+                    if (fm.CurrentType == null) fm.NewType("Standard");
+                    AddParameters(fm, pred.Parameters, ref paramsAdded, ref paramsValued);
+                    flex = BuildParametricBox(famDoc, pred.Geometry!, fm);
+                    tx.Commit();
+                }
+                catch
+                {
+                    if (tx.HasStarted() && !tx.HasEnded()) tx.RollBack();
+                    throw;
+                }
+            }
+
+            famDoc.SaveAs(outputPath, new SaveAsOptions { OverwriteExistingFile = true });
+            return new BuildOutcome
+            {
+                ParamsAdded = paramsAdded,
+                ParamsValued = paramsValued,
+                ParamsTotal = pred.Parameters?.Count ?? 0,
+                Flex = flex,
+                OutputPath = outputPath,
+            };
+        }
+        catch
+        {
+            // Containment: never leave a partial .rfa behind on failure.
+            try
+            {
+                if (File.Exists(outputPath)) File.Delete(outputPath);
+            }
+            catch (Exception cleanupEx)
+            {
+                ApexLog.Warn("Could not remove partial output: " + cleanupEx.Message);
+            }
+            throw;
         }
         finally
         {

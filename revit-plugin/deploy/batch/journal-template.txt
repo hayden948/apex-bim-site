@@ -1,0 +1,14 @@
+' Apex batch build journal (replay template).
+' HOW TO ARM (one-time): run the batch once by clicking the ribbon button with
+' journaling (always on), then copy the "Execute external command" line from the
+' recorded journal in %LOCALAPPDATA%\Autodesk\Revit\Autodesk Revit <ver>\Journals
+' over the PLACEHOLDER line below. Keep everything else.
+' APEX_BATCH_DIR must be set before Revit starts (run-batch.ps1 does this) —
+' BatchBuildCommand reads it and runs dialog-free.
+Dim Jrn
+Set Jrn = CrsJournalScript
+Jrn.Directive "DebugMode", "PerformAutomaticActionInErrorDialog", 1
+Jrn.Directive "DebugMode", "PermissiveJournal", 1
+' PLACEHOLDER — replace with the recorded line, e.g.:
+' Jrn.RibbonEvent "Execute external command:CustomCtrl_%CustomCtrl_%Apex BIM Studio%M1%ApexBatchBuild:Apex.BimStudio.Commands.BatchBuildCommand"
+Jrn.Command "SystemMenu" , "Quit the application; prompts to save projects, Exit"

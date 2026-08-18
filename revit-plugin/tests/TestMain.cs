@@ -166,6 +166,7 @@ class TestMain
         RunFamilySpecValidatorTests(opts);
         RunSchemaContractTest();
         RunFixtureTests();
+        RunBatchReportTests();
 
         Console.WriteLine(_failures == 0 ? "\nALL TESTS PASSED" : $"\n{_failures} FAILURES");
         return _failures == 0 ? 0 : 1;
@@ -301,6 +302,64 @@ class TestMain
             "contract: unit enum");
         AssertTrue(root.GetProperty("properties").GetProperty("schema_version").GetProperty("const").GetString()
             == PredValidator.Version, "contract: schema_version const");
+    }
+
+    // ---------- Batch harness: report engine (Revit-free half) ----------
+
+    static void RunBatchReportTests()
+    {
+        // Failure classification without Revit types present.
+        AssertTrue(BatchRunReport.Classify(new JsonException("bad")) == BatchRunReport.FailureClass.BadInput,
+            "batch: JsonException -> BadInput");
+        AssertTrue(BatchRunReport.Classify(new System.IO.IOException("disk")) == BatchRunReport.FailureClass.Environment,
+            "batch: IOException -> Environment");
+        AssertTrue(BatchRunReport.Classify(new InvalidOperationException("Family template not found"))
+            == BatchRunReport.FailureClass.Environment, "batch: template message -> Environment");
+        AssertTrue(BatchRunReport.Classify(new InvalidOperationException("boom"))
+            == BatchRunReport.FailureClass.Unknown, "batch: unmatched -> Unknown");
+
+        AssertTrue(BatchRunReport.QuarantineMarkerName("x.pred.json") == "x.pred.json.FAILED.txt",
+            "batch: quarantine marker never looks like a finished artifact");
+
+        var okRow = new BatchRunReport.Row
+        {
+            File = "a.pred.json", ValidateOk = true, BuildOk = true,
+            ParamsAdded = 5, ParamsValued = 4, FlexWidth = true, FlexDepth = true,
+            FlexHeight = true, Centered = true, WallMs = 1234, RfaPath = "out/a.rfa",
+        };
+        var failRow = new BatchRunReport.Row
+        {
+            File = "b.pred.json", ValidateOk = false,
+            Failure = BatchRunReport.FailureClass.SchemaViolation,
+            Error = "b.pred.json: geometry.width.value must be a number > 0 (got -4)", WallMs = 12,
+        };
+        var revitFail = new BatchRunReport.Row
+        {
+            File = "c.pred.json", ValidateOk = true,
+            Failure = BatchRunReport.FailureClass.RevitApi, Error = "regen failed", WallMs = 900,
+        };
+
+        string line = BatchRunReport.ToJsonLine(failRow);
+        using var parsed = JsonDocument.Parse(line);
+        AssertTrue(parsed.RootElement.GetProperty("failure_class").GetString() == "SchemaViolation",
+            "batch: jsonl line carries failure class");
+        AssertTrue(parsed.RootElement.GetProperty("error").GetString()!.Contains("geometry.width.value"),
+            "batch: jsonl line carries the named-field error");
+
+        string matrix = BatchRunReport.BuildMatrix(new[] { okRow, failRow, revitFail }, "test", "2026-08-18 00:00:00");
+        AssertTrue(matrix.Contains("| a.pred.json | ok | ok | - | 4/5 | y/y/y/y | 1234 | out/a.rfa |"),
+            "batch: matrix row for success");
+        AssertTrue(matrix.Contains("| b.pred.json | FAIL | FAIL | SchemaViolation |"),
+            "batch: matrix row for schema failure");
+        AssertTrue(matrix.Contains("- SchemaViolation: 1") && matrix.Contains("- RevitApi: 1"),
+            "batch: taxonomy counts present");
+        AssertTrue(matrix.Contains("**1/3 succeeded (33%)"),
+            "batch: success rate computed over ALL attempted files (no cherry-picking)");
+        AssertTrue(matrix.Contains("not a claim") && matrix.Contains("unseen drawings"),
+            "batch: matrix carries the honesty disclaimer");
+
+        string empty = BatchRunReport.BuildMatrix(Array.Empty<BatchRunReport.Row>(), "empty", "t");
+        AssertTrue(empty.Contains("**0/0 succeeded"), "batch: empty batch does not divide by zero");
     }
 
     // ---------- FamilySpec v1: fixtures ----------

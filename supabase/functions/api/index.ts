@@ -275,6 +275,14 @@ function runQaPipeline(afis: any): Finding[] {
     params.some((p) => p?.name === "Apex_AfisId"),
     "Families should carry an Apex_AfisId stamp parameter",
     "Add an Apex_AfisId Text parameter holding the family id", true);
+  // Anti-regression for the round-2 defect: a duplicate stamp lets an
+  // extracted value overwrite the family's real id at build time.
+  const stampCount = params.filter((p) => p?.name === "Apex_AfisId").length;
+  add("P-4", "error", "profile", "$.parameters",
+    stampCount <= 1,
+    stampCount <= 1 ? "Single Apex_AfisId stamp"
+      : `${stampCount} Apex_AfisId parameters — a duplicate stamp would overwrite the family's id at build time`,
+    "Remove the extracted Apex_AfisId; the server-stamped one must be the only one", true);
 
   const min = afis.geometry?.bbox?.min, max = afis.geometry?.bbox?.max;
   const bboxOk = Array.isArray(min) && Array.isArray(max) && min.length === 3 && max.length === 3 &&
