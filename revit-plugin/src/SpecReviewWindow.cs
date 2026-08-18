@@ -340,6 +340,21 @@ internal sealed class SpecReviewWindow : Window
     private void OnSaveAndBuild(object sender, RoutedEventArgs e)
     {
         if (!SaveNow()) return;
+        // The default button must not fly past a half-fix: if the drawing's
+        // overall size and a same-named parameter disagree, make the modeler
+        // choose with the warning ON SCREEN, not in a closing window
+        // (V2 re-review finding 3).
+        List<string> consistency = _model.ConsistencyWarnings();
+        if (consistency.Count > 0)
+        {
+            MessageBoxResult go = MessageBox.Show(this,
+                "Saved — but worth a look before building:\n\n• " +
+                string.Join("\n• ", consistency) +
+                "\n\nBuild anyway?",
+                "Apex — values disagree", MessageBoxButton.YesNo, MessageBoxImage.Warning,
+                MessageBoxResult.No);
+            if (go != MessageBoxResult.Yes) return; // stay open; status already shows the warnings
+        }
         BuildRequested = true;
         DialogResult = true;
         Close();

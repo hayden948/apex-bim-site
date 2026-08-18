@@ -281,13 +281,27 @@ public class BatchBuildCommand : IExternalCommand
         {
             // Fresh-run semantics: a stale output from an earlier run must not
             // survive a run in which this input fails (adversarial finding 3).
-            try
+            // An UNREMOVABLE stale output (read-only, open in another program)
+            // is a hard machine-class failure HERE, before any Revit call:
+            // deterministic classification, a message that names the fix, and
+            // the surviving old file is explained rather than looking like a
+            // containment bug (round-4 V2 re-review findings 1–2).
+            if (File.Exists(outputPath))
             {
-                if (File.Exists(outputPath)) File.Delete(outputPath);
-            }
-            catch (Exception ex)
-            {
-                ApexLog.Warn($"Could not remove stale output {outputPath}: " + ex.Message);
+                try
+                {
+                    File.Delete(outputPath);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    row.Failure = BatchRunReport.FailureClass.Environment;
+                    row.Error = $"The existing family file could not be replaced: {Path.GetFileName(outputPath)} " +
+                        "is read-only or open in another program. The OLD file from an earlier run is still " +
+                        "there; clear its read-only attribute (or close the program using it) and run again. " +
+                        $"({ex.Message})";
+                    row.Detail = ex.ToString();
+                    return row;
+                }
             }
 
             string text = File.ReadAllText(file);
@@ -314,6 +328,22 @@ public class BatchBuildCommand : IExternalCommand
                 return row;
             }
             row.ValidateOk = true;
+
+            // A drawing whose overall size disagrees with a same-named
+            // Dimensions parameter must not sail through the batch silently
+            // (the builder keeps the spec's parameter value; the mismatch is
+            // the extraction's problem to surface): counted as warnings, so
+            // the row lands in "needs review" and the log names the fields.
+            try
+            {
+                List<string> drift = SpecReviewModel.Load(file).ConsistencyWarnings();
+                foreach (string w in drift) ApexLog.Warn($"{row.File}: {w}");
+                row.ValidateWarnings += drift.Count;
+            }
+            catch (Exception ex)
+            {
+                ApexLog.Warn($"Consistency check failed for {row.File} (continuing): " + ex.Message);
+            }
 
             var opts = new JsonSerializerOptions
             {

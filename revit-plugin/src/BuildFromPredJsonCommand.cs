@@ -315,8 +315,11 @@ public class BuildFromPredJsonCommand : IExternalCommand
 
     /// <summary>
     /// Create (and value from the box geometry) the three dimension parameters
-    /// the labeled dimensions bind to, when the spec didn't supply them. Values
-    /// are set so the labels agree with the sketched geometry at first regen.
+    /// the labeled dimensions bind to, when the spec didn't supply them. A
+    /// parameter the SPEC already carries is left untouched — the extraction's
+    /// value must never be silently overwritten by geometry (V2 re-review
+    /// finding 5); a disagreement between the two is surfaced by the
+    /// consistency check, not resolved here.
     /// </summary>
     private static void EnsureDimensionParameters(FamilyManager fm, PredGeometry geom)
     {
@@ -324,8 +327,13 @@ public class BuildFromPredJsonCommand : IExternalCommand
         {
             try
             {
-                FamilyParameter fp = fm.get_Parameter(name)
-                    ?? fm.AddParameter(name, GroupTypeId.Geometry, SpecTypeId.Length, false);
+                FamilyParameter existing = fm.get_Parameter(name);
+                if (existing != null)
+                {
+                    ApexLog.Info($"Dimension parameter '{name}' supplied by the spec — keeping its value.");
+                    return;
+                }
+                FamilyParameter fp = fm.AddParameter(name, GroupTypeId.Geometry, SpecTypeId.Length, false);
                 double feet = DimToFeet(dim);
                 if (fp != null && feet > 0.0) fm.Set(fp, feet);
             }

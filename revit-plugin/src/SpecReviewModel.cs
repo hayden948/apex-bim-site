@@ -348,12 +348,20 @@ public sealed class SpecReviewModel
         if (_root["parameters"] is not JsonArray pars) return warnings;
         foreach (string dim in new[] { "width", "depth", "height" })
         {
-            JsonNode? g = _root["geometry"]?[dim]?["value"];
+            JsonNode? d = _root["geometry"]?[dim];
+            JsonNode? g = d?["value"];
             if (g == null || g.GetValueKind() != JsonValueKind.Number) continue;
-            double geomVal = g.GetValue<double>();
+            string geomUnit = d?["unit"] is JsonNode gu && gu.GetValueKind() == JsonValueKind.String
+                ? gu.GetValue<string>() : "in";
+            double geomFeet = UnitConv.ToFeet(g.GetValue<double>(), geomUnit, "in");
             foreach (JsonNode? p in pars)
             {
                 if (p is not JsonObject o || !NamesDimension(StringOf(o["name"]), dim)) continue;
+                // Same scope as the confidence borrow: only Dimensions-group
+                // parameters describe the box (an Electrical "Width" is a
+                // different animal — V2 re-review finding 8).
+                if (o["group"] is not JsonNode grp || grp.GetValueKind() != JsonValueKind.String
+                    || grp.GetValue<string>() != "Dimensions") continue;
                 JsonNode? v = o["value"];
                 double paramVal;
                 if (v == null) continue;
@@ -362,10 +370,16 @@ public sealed class SpecReviewModel
                     && double.TryParse(v.GetValue<string>(), NumberStyles.Float,
                         CultureInfo.InvariantCulture, out double parsed)) paramVal = parsed;
                 else continue;
-                if (Math.Abs(paramVal - geomVal) > 0.001)
+                // Compare in feet so 610 mm and 24 in agree (unit-blind raw
+                // comparison was V2 re-review finding 8). Length parameters
+                // default to inches, matching the builder's convention.
+                string paramUnit = o["units"] is JsonNode un && un.GetValueKind() == JsonValueKind.String
+                    ? un.GetValue<string>() : "in";
+                double paramFeet = UnitConv.ToFeet(paramVal, paramUnit, "in");
+                if (Math.Abs(paramFeet - geomFeet) > 0.005)
                 {
-                    warnings.Add($"Overall {dim} is {StringOf(g)} but the '{StringOf(o["name"])}' parameter " +
-                        $"says {StringOf(v)} — if you corrected one, correct the other to match.");
+                    warnings.Add($"Overall {dim} is {StringOf(g)} {geomUnit} but the '{StringOf(o["name"])}' " +
+                        $"parameter says {StringOf(v)} {paramUnit} — if you corrected one, correct the other to match.");
                 }
             }
         }

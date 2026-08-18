@@ -10,5 +10,5 @@ Set Jrn = CrsJournalScript
 Jrn.Directive "DebugMode", "PerformAutomaticActionInErrorDialog", 1
 Jrn.Directive "DebugMode", "PermissiveJournal", 1
 ' PLACEHOLDER — replace with the recorded line, e.g.:
-' Jrn.RibbonEvent "Execute external command:CustomCtrl_%CustomCtrl_%Apex BIM Studio%M1%ApexBatchBuild:Apex.BimStudio.Commands.BatchBuildCommand"
+' Jrn.RibbonEvent "Execute external command:CustomCtrl_%CustomCtrl_%Apex BIM Studio%Submittals%ApexBatchBuild:Apex.BimStudio.Commands.BatchBuildCommand"
 Jrn.Command "SystemMenu" , "Quit the application; prompts to save projects, Exit"

@@ -51,11 +51,13 @@ optional; journal + logs are what the ledger needs.
 
 ## Honest-failure spot checks (10 min)
 
-- [ ] 9. Mid-batch failure INSIDE Revit (the round's forced-failure item): in `out\`,
-  right-click any built `.rfa` → Properties → set **Read-only**. Run **Batch Build** again on
-  the same folder, Yes. **Expect:** that one drawing FAILS (machine/environment class — the
-  file could not be written), every other golden rebuilds, the batch does not stop, and the
-  report's What-to-do blames the machine, not the drawing. Clear the Read-only flag after.
+- [ ] 9. Forced mid-batch failure: in `out\`, right-click any built `.rfa` → Properties → set
+  **Read-only**. Run **Batch Build** again on the same folder, Yes. **Expect:** that one
+  drawing FAILS with "The existing family file could not be replaced … read-only or open in
+  another program", every other golden rebuilds, the batch does not stop, and the report's
+  What-to-do blames the machine, not the drawing. The OLD read-only `.rfa` is still in `out\`
+  — the error message says so; that is the one FAIL-row-with-a-file case that is NOT a
+  containment bug (see the operator checklist). Clear the Read-only flag after.
 - [ ] 10. Open the newest `run-*batch*.log`: the failures must be findable WITHOUT stack-trace
   literacy — file name + what was wrong + that the batch continued.
 - [ ] 11. Rename Revit's family template folder temporarily (Options → File Locations), run

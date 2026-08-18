@@ -558,6 +558,31 @@ class TestMain
         AssertTrue(apex.ConsistencyWarnings().Count == 0,
             "review: consistency warning clears when both sides agree");
 
+        // Unit-aware (V2 re-review finding 8): 610 mm and 24 in are the same
+        // length; an Electrical-group "Width" is not a box dimension at all.
+        string unitsPath = System.IO.Path.Combine(tmp, "units.pred.json");
+        System.IO.File.WriteAllText(unitsPath, @"{
+  ""schema_version"": ""1.0"", ""family_name"": ""U"", ""category"": ""Electrical Equipment"",
+  ""geometry"": { ""primitive"": ""box"",
+    ""width"": { ""value"": 610, ""unit"": ""mm"" }, ""depth"": { ""value"": 610, ""unit"": ""mm"" },
+    ""height"": { ""value"": 610, ""unit"": ""mm"" } },
+  ""parameters"": [
+    { ""name"": ""Width"", ""spec_type"": ""Length"", ""group"": ""Dimensions"",
+      ""is_instance"": false, ""value"": ""24"", ""units"": ""in"" },
+    { ""name"": ""Depth"", ""spec_type"": ""Length"", ""group"": ""Dimensions"",
+      ""is_instance"": false, ""value"": ""0"", ""units"": ""in"" },
+    { ""name"": ""Height"", ""spec_type"": ""Number"", ""group"": ""Electrical"",
+      ""is_instance"": false, ""value"": ""999"" } ]
+}");
+        var units = SpecReviewModel.Load(unitsPath);
+        List<string> uwarn = units.ConsistencyWarnings();
+        AssertTrue(!uwarn.Any(w => w.Contains("'Width'")),
+            "review: 610 mm vs 24 in agree once units are honored (no false alarm)");
+        AssertTrue(uwarn.Any(w => w.Contains("'Depth'") && w.Contains("0")),
+            "review: a genuinely wrong dimension still warns across units");
+        AssertTrue(!uwarn.Any(w => w.Contains("'Height'")),
+            "review: non-Dimensions groups are not treated as box dimensions");
+
         // The committed walkthrough demo files behave exactly as the checklist promises.
         string? demoDir = FindRepoFile(System.IO.Path.Combine("schemas", "familyspec", "fixtures", "demo"));
         AssertTrue(demoDir != null, "review: demo fixture dir located");
@@ -652,8 +677,28 @@ class TestMain
         };
         AssertTrue(BatchRunReport.NeedsReview(suspectRow),
             "report: failed geometry checks count as needs-review");
-        AssertTrue(!BatchRunReport.NeedsReview(okRow) || okRow.LowConfidenceFields.Length > 0,
-            "report: NeedsReview matches the low-confidence flag on the ok row");
+        var cleanRow = new BatchRunReport.Row
+        {
+            File = "clean.pred.json", ValidateOk = true, BuildOk = true,
+            FlexWidth = true, FlexDepth = true, FlexHeight = true, Centered = true,
+        };
+        AssertTrue(!BatchRunReport.NeedsReview(cleanRow),
+            "report: a clean build (no warnings, no low-confidence, checks pass) is NOT flagged");
+        AssertTrue(BatchRunReport.NeedsReview(okRow),
+            "report: a low-confidence field flags an otherwise clean build");
+
+        // Progress-window failure wording is customer language, never enum names
+        // (V2 re-review finding 6).
+        foreach (BatchRunReport.FailureClass fc in Enum.GetValues(typeof(BatchRunReport.FailureClass)))
+        {
+            string words = BatchRunReport.CustomerClass(fc);
+            AssertTrue(!words.Contains(fc.ToString()) || fc == BatchRunReport.FailureClass.None,
+                $"report: CustomerClass({fc}) avoids the enum name");
+            AssertTrue(words.Length > 0 && words == words.ToLowerInvariant() || fc == BatchRunReport.FailureClass.RevitApi,
+                $"report: CustomerClass({fc}) is plain words");
+        }
+        AssertTrue(BatchRunReport.CustomerClass(BatchRunReport.FailureClass.Environment) == "machine setup problem",
+            "report: Environment reads as a machine problem to the modeler");
         string repSuspect = BatchRunReport.BuildCustomerReport(new[] { suspectRow }, "t", null);
         AssertTrue(repSuspect.Contains("treat it as suspect")
             && repSuspect.Contains("What to do: rebuild just this item"),

@@ -64,7 +64,10 @@ line, no `.rfa` in `out\` for that drawing, and the batch continues to the next 
 starts fresh: the jsonl is reset, stale quarantine markers are cleared, and each input's
 stale output is removed before it is processed — so every artifact you collect belongs to THIS
 run. If you ever find a `.rfa` for a drawing whose matrix row says FAIL, that is a containment
-bug — report it with both files.
+bug — report it with both files. ONE exception: an `Environment` failure saying "the existing
+family file could not be replaced" means Windows blocked removing an OLD file from an earlier
+run (read-only, or open in another program) — that old `.rfa` legitimately survives, the error
+names it, and the fix is yours (clear the attribute / close the program), not a bug report.
 
 ## After scripted runs
 

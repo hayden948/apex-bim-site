@@ -164,7 +164,8 @@ internal sealed class BatchProgressWindow : Window
         }
         else
         {
-            item.Text = "✗ " + row.File + " — " + row.Failure + ": " +
+            // Customer words, not taxonomy enum names (V2 re-review finding 6).
+            item.Text = "✗ " + row.File + " — " + BatchRunReport.CustomerClass(row.Failure) + ": " +
                 (string.IsNullOrEmpty(row.Error) ? "see the build report" : row.Error);
             item.Foreground = Brushes.Firebrick;
         }

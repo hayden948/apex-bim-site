@@ -247,6 +247,20 @@ public static class BatchRunReport
     public static bool FlexOk(Row r) => r.FlexWidth && r.FlexDepth && r.FlexHeight && r.Centered;
 
     /// <summary>
+    /// The failure class in the modeler's words — for every surface a customer
+    /// sees (progress window, dialogs). The enum names stay in RUN_MATRIX.md
+    /// and the jsonl, which are operator/support artifacts.
+    /// </summary>
+    public static string CustomerClass(FailureClass f) => f switch
+    {
+        FailureClass.BadInput => "unreadable file",
+        FailureClass.SchemaViolation => "the spec has invalid fields",
+        FailureClass.Environment => "machine setup problem",
+        FailureClass.RevitApi => "Revit rejected the build",
+        _ => "unexpected error",
+    };
+
+    /// <summary>
     /// A built row the modeler should look at before using the family:
     /// extraction notes, low-confidence values, or failed geometry checks.
     /// Shared by the report headline, the progress window, and the batch

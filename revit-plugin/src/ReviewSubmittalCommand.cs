@@ -62,7 +62,9 @@ public class ReviewSubmittalCommand : IExternalCommand
             if (win.Saved)
                 TaskDialog.Show("Apex — review saved",
                     $"Corrections saved to {fileLabel}.\nThe original extraction is kept as {fileLabel}.bak.\n\n" +
-                    "Nothing was built. Use Build Family (or Batch Build for the folder) when ready.");
+                    "Nothing was built. To build it into the batch's out folder (and update the build " +
+                    "report), open it in Review Submittal again and choose Save and Build — or re-run " +
+                    "Batch Build on the folder.");
             return win.Saved ? Result.Succeeded : Result.Cancelled;
         }
 
