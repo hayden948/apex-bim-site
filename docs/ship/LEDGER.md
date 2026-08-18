@@ -1175,3 +1175,55 @@ success (run 32186260537, started 21:09:46Z, finished 21:10:58Z). Every round-4 
 1279d84, b9f4510, 54e064b, 61104a5, fb5fbe3, 987c3bf — is green on the authoritative
 windows-latest toolchain (real .NET SDK + WPF, test project executed). ROUND 4 CLOSED at
 T0+79 min, inside the 120-min stop.
+
+---
+
+## ROUND 5 — signed, installable, licensed build + rehearsal + go/no-go
+
+**T0: Tue Aug 18 21:26:39 UTC 2026** (hard stop 23:26:39 UTC). Brief: installer verified OUTSIDE
+the dev machine (or absence flagged as ship blocker); Ed25519 licensing exercised in all four
+states (valid/expired/tampered/missing); release tagged with hashes + rollback procedure; timed
+dry-run rehearsal on the packaged build; quickstart + known-limitations (with the REAL round-3
+holdout rate); final re-evaluation with an unhedged go/no-go.
+
+### Cycle 1 (T0 → T0+25) — state, scope honesty, licensing build begins
+
+New-inputs check (21:26–21:28 UTC, pasted):
+
+```
+$ git log origin/main --oneline -1        -> f588c95 (unchanged)
+$ git status --short | wc -l              -> 0 (clean at 4c63eb3)
+-- DB: uploads = 7, latest = 2026-08-12 04:14 UTC (unchanged since round 1)
+```
+
+Still ZERO Meta EMT 11990 drawings anywhere. That fact will dominate the go/no-go.
+
+**Scope honesty, stated before any work — what this environment can and cannot deliver:**
+
+1. **Installer**: BUILDABLE-HERE (scripts, packaged zip, dependency resolution, version stamp,
+   SHA256 manifest, uninstall). NOT verifiable here: no Windows, no Revit, no clean VM, no
+   fresh user profile exists in this container. Per the brief's own rule, this is stated now:
+   **the installer will be UNTESTED and that is a named ship blocker** until a human runs it
+   on a clean machine (verification steps will be appended to the walkthrough kit).
+2. **Licensing**: the round-1 register (row 8) proved Ed25519 licensing DOES NOT EXIST in any
+   reachable code (zero grep hits) and said round 5 must either build it or ship without it.
+   This brief orders the flow exercised — read as the decision to BUILD it. Ed25519 is absent
+   from the .NET BCL on both targets, so a vetted library (BouncyCastle, netstandard2.0) will
+   be fetched from NuGet. The whole flow is Revit-free → all four states are provable HERE
+   with real keys in the test suite. Private signing key goes to the service-role-only
+   app_config table (public repo — no secrets in git); a TEST keypair (clearly marked) is
+   committed for the suite.
+3. **Dry-run rehearsal "on the packaged build"**: the packaged CLOUD half (deployed api v29 —
+   that IS the production build) can be rehearsed and timed from here live; the Revit half
+   cannot (no Revit). Deliverables: timed cloud-half rehearsal with friction log + the
+   run-of-show/rehearsal script for the full flow; Revit-half timing is HUMAN-VERIFY via the
+   existing walkthrough.
+4. **Known-limitations "real holdout success rate"**: the real value is **NEVER MEASURED** —
+   the round-3 holdout is BLOCKED-ON-OPERATOR with zero drawings. The limitations page will
+   say exactly that instead of inventing a number (honesty rule).
+
+Build order: (1) Ed25519 licensing (ApexLicense + gate + signer tool + 4-state tests);
+(2) installer package (install/uninstall.ps1, deps resolved incl. net48 STJ chain, version
+stamp, SHA256SUMS, packaged zip built here); (3) tag + hashes + rollback doc; (4) timed
+cloud rehearsal + rehearsal script; (5) quickstart + limitations; (6) final re-evaluation +
+go/no-go; (7) V1/V2("find the assumption that only holds on your machine")/V3.
