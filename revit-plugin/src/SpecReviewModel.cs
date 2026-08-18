@@ -126,8 +126,12 @@ public sealed class SpecReviewModel
         });
         fields.Add(new Field
         {
+            // "(from the submittal)": the current builder always uses the
+            // Electrical Equipment template regardless of this value —
+            // category-driven template selection is logged ledger debt, and
+            // the label must not imply the value is honored.
             Key = "category",
-            Label = "Revit category",
+            Label = "Category (from the submittal)",
             Value = StringOf(_root["category"]),
             Editable = false,
         });
