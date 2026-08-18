@@ -725,3 +725,69 @@ HANDOFF for round 4: operator owes drawings (through the #11 data-handling gate 
 Sprint 001 fixtures, CVE Revit version, briefing docs, TELEGRAM_BOT_TOKEN. Round-4 accuracy
 work is meaningless until real drawings exist; if they arrive, run the batch kit FIRST, then
 tune, keeping the holdout sealed.
+
+---
+
+## ROUND 4 — customer-facing add-in: a CVE modeler who has never seen this tool
+
+**T0: Tue Aug 18 19:53:26 UTC 2026** (hard stop 21:53:26 UTC). Brief: ribbon/commands in the
+customer's language; batch dialog with per-item progress/result/summary (Revit API single-threaded
+— sanctioned patterns only); spec review & override before build; customer-kept build report next
+to the .rfa files; one log file per run. Guardrails: NO schema changes, NO new equipment classes;
+schema-implying UI needs → ledger debt + route around.
+
+### Cycle 1 (T0 → T0+25) — state check, plan, environment constraints
+
+New-inputs check (ran 19:56 UTC, pasted):
+
+```
+$ git fetch origin main && git log origin/main --oneline -1
+f588c95 Initial commit: APEX BIM Studio marketing site
+$ git rev-parse --abbrev-ref HEAD; git status --short | wc -l
+claude/analysis-improvement-fvnun0
+0
+-- DB (studio project): select count(*), max(created_at) from uploads;
+uploads = 7, latest = 2026-08-12 04:14 UTC
+```
+
+Same 7 uploads as rounds 1–3; still zero Meta EMT 11990 drawings. Branch clean at d4b0cee.
+
+**Classification of this round's work** (same honesty scheme as rounds 1–3):
+
+- BUILDABLE-HERE: all C# (compiles against Revit API stubs via the scratchpad csc toolchain),
+  the Revit-free logic (per-run logging, spec review/override model, build-report generator,
+  progress bookkeeping), all tests, the walkthrough checklist document, ribbon text.
+- HUMAN-VERIFY-REQUIRED: everything the EXIT names — the clean-Revit-2025 walkthrough (journal
+  + run log are the machine evidence; Claude cannot capture GUI screenshots), dialog rendering,
+  real mid-batch failure behavior under Revit. A one-page checklist for Hayden is this round's
+  deliverable for that.
+- The override demo on "a real round-3 parser miss": round 3's parser misses on REAL drawings
+  don't exist (no drawings). The nearest REAL artifact is the round-1/2 fixture family whose
+  extraction produced a wrong/low-confidence dimension (nq430: `depth` extracted 0.0 with low
+  confidence — LEDGER R1 C3). The override demo therefore uses that real extraction artifact
+  class: load a pred.json with a zero/absurd dimension + low confidence field → review surfaces
+  it → operator corrects → validator accepts → that one item rebuilds. Demonstrated here at the
+  model layer with tests; in-Revit demonstrated via the checklist. Logged as a scope statement,
+  not silently substituted.
+
+**Threading decision (logged as reasoned design, per the brief's warning):** the brief sanctions
+ExternalEvent for modeless→API. A modeless WPF dialog + ExternalEvent pump would be the maximal
+version; it is also the highest-risk untestable-here surface (window lifetime vs Revit idling,
+re-entrancy). Round-4 choice: **modal, code-built WPF dialogs** (XAML/BAML compilation is
+unavailable in this toolchain — pure-code WPF only) with progress rendered between per-item
+transactions on the API thread, using Dispatcher frame pumping so the per-item status paints.
+That is the brief's "frozen-but-progressing UI with honest per-item status". ExternalEvent
+refactor logged as debt below. All Revit API calls stay on the API thread; zero background
+threads touch the API.
+
+Build order decided: (1) ApexLog per-run scope → one timestamped log file per run;
+(2) SpecReviewModel — Revit-free load→fields-with-confidence→edit→validate→save core (the
+override release valve, testable here); (3) customer BUILD_REPORT generator in BatchRunReport;
+(4) BatchBuildCommand: confirmation, per-item progress window, per-run log, report; (5) Review
+command + full ribbon customer-language pass; (6) TestMain coverage; (7) walkthrough checklist;
+(8) verification + register update.
+
+DEBT logged (schema-implying, routed around): the review UI wants per-field provenance (which
+page/table of the submittal a value came from) — that is extraction-schema territory (v1.1
+field), NOT added this round. Confidence is already in the contract (`confidence` map) and is
+used as-is.
