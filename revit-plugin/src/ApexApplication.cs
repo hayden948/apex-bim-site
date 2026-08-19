@@ -21,6 +21,13 @@ public class ApexApplication : IExternalApplication
     {
         try
         {
+            // Round 5: the add-in ships its own dependency set (System.Text.Json
+            // chain on net48, BouncyCastle on both). Revit loads add-ins via
+            // LoadFrom, which USUALLY probes our folder for dependents — but a
+            // version mismatch or another add-in's loader can break that. This
+            // hook makes "our folder first" explicit; it only ever answers for
+            // files we actually ship and logs when it fires.
+            AppDomain.CurrentDomain.AssemblyResolve += ResolveFromAddinFolder;
             try
             {
                 app.CreateRibbonTab(Tab);
@@ -113,7 +120,32 @@ public class ApexApplication : IExternalApplication
         }
     }
 
-    public Result OnShutdown(UIControlledApplication app) => Result.Succeeded;
+    public Result OnShutdown(UIControlledApplication app)
+    {
+        AppDomain.CurrentDomain.AssemblyResolve -= ResolveFromAddinFolder;
+        return Result.Succeeded;
+    }
+
+    private static System.Reflection.Assembly? ResolveFromAddinFolder(object? sender, ResolveEventArgs args)
+    {
+        try
+        {
+            string name = new System.Reflection.AssemblyName(args.Name).Name + ".dll";
+            string? dir = System.IO.Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            if (dir == null) return null;
+            string candidate = System.IO.Path.Combine(dir, name);
+            if (System.IO.File.Exists(candidate))
+            {
+                ApexLog.Info("Resolved dependency from the add-in folder: " + name);
+                return Assembly.LoadFrom(candidate);
+            }
+        }
+        catch (Exception ex)
+        {
+            ApexLog.Warn("Dependency resolution failed for '" + args.Name + "': " + ex.Message);
+        }
+        return null;
+    }
 
     private static RibbonPanel Panel(UIControlledApplication app, string name)
     {
