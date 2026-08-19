@@ -1426,3 +1426,82 @@ Release identity FINAL for this round: commit 83efe13 (local tag v0.5.0-rc1 move
 zip 16c0cac0…, net48 dll f62c7468…, net8 dll 02474c0a… (full hashes in ROLLBACK.md).
 
 V2 launched: charge = find the assumption that only holds on this machine.
+
+### Cycle 6 (21:20–21:30 UTC Wed) — V2 verdict: REFUTED; all findings fixed or dispositioned
+
+V2 (charged: find the assumption that only holds on this machine) — REFUTED, 8 findings. Its
+core sentence: "the only version-stamped, dependency-complete package is one nobody has built,
+the documented 'canonical' build path (CI artifacts → make-package.sh) is provably broken, and
+the hashes recorded as the release identity point at artifacts that exist only inside the
+authoring container." It also INDEPENDENTLY re-verified the Ed25519 fixtures in pure Python
+(test key derives, valid/expired verify, tampered fails) and confirmed fail-closed gates,
+BOM/CRLF license tolerance, InvariantCulture parsing, and the go/no-go's consistency.
+
+Disposition (fixes in commit a9a604b; suite 217 assertions ALL TESTS PASSED after):
+
+1. **Broken canonical package path — CONFIRMED, FIXED at both ends.** CI now builds the
+   package itself (full dependency folders uploaded AND a make-package.sh-assembled zip
+   artifact; tag pushes trigger it), and make-package.sh hard-fails on a build folder missing
+   BouncyCastle/ProtectedData (both targets) or the net48 STJ chain. The
+   installs-cleanly-then-dies-at-first-click scenario is now unreachable via the documented
+   procedure.
+2. **Version stamp not on the hashed artifact — CONFIRMED, FIXED.** rc DLLs rebuilt with
+   0.5.0 assembly attributes (verified: version resource string 0.5.0.0 in the packaged dll);
+   CI builds were always stamped via the csproj.
+3. **Container-resident artifacts — CONFIRMED, FIXED by process.** The durable artifact is
+   now the CI-assembled package (per-run + per-tag); ROLLBACK.md names the operator flow
+   (tag → download package artifact → GitHub Release → record hashes). Container zips
+   explicitly non-canonical.
+4. **Criterion 4 shortfall + stale doc line — CONFIRMED.** The brief's "timed on the packaged
+   build" is UNMET for the Revit half and cannot be met here; REHEARSAL.md now says so itself
+   and the stale "installer (never executed)" line is corrected. Logged as an EXIT deviation,
+   not papered over.
+5. **PS 5.1 mojibake (BOM-less UTF-8) — CONFIRMED, FIXED** (both scripts saved UTF-8 with
+   BOM; harness re-run under pwsh passes).
+6. **net48 ProtectedData missing — CONFIRMED, FIXED** (shipped in the package; required-file
+   check enforces it forever; Sign In/Settings on 2022–2024 would have died).
+7. **Production-path Valid unverifiable — PARTIALLY CONFIRMED, ADDRESSED.** license-signer
+   gains `verify`; the CVE trial license re-verified against the embedded production key via
+   the COMMITTED tool (pasted: "SIGNATURE OK: {licensee: Cache Valley Electric …
+   expires 2026-11-30}"). Residual truth: Valid-in-Revit remains walkthrough step 1c.
+8. **Minors — FIXED**: 2026 dropped from ValidateSet; placeholder vendor URL → real repo URL;
+   QUICKSTART shared-workstation ACL note. Criterion-5 letter ("the REAL holdout rate")
+   remains honestly unmet — no number exists; the reviewer itself judged the limitations page
+   "about as honest as possible".
+
+**Final V3 gate (pasted):** 217 assertions ALL TESTS PASSED (fresh compiles, both targets);
+installer harness re-run on the FINAL package under pwsh 7.4.6 — all checks pass; final
+release identity: commit a9a604b (local tag v0.5.0-rc1), zip 8cc4f6b9…, net48 dll 3cbeee27…,
+net8 dll 074e9ba4… (full hashes in ROLLBACK.md). Windows CI: runs 27/28 green (licensing on
+the real toolchain); the run for the workflow's new packaging step fires on this push —
+if it fails, the fix lands as a follow-up commit and the ledger gets a correction line.
+
+#### ROUND 5 EXIT status
+
+- Installer: BUILT + logic EXECUTED (pwsh harness: happy path, dep selection, integrity
+  refusal, clean uninstall) — **outside-the-dev-machine verification IMPOSSIBLE here and
+  NAMED AS A SHIP BLOCKER** (brief's own escape clause exercised); walkthrough steps 1–1c
+  are the closing vehicle.
+- Licensing: **all four states demonstrated with real Ed25519 keys** (17 assertions + Windows
+  CI + independent Python re-verification by the adversarial reviewer + committed verify
+  tool against the production key). In-Revit dialog rendering pending (walkthrough).
+- Release: version-stamped, hashes recorded, rollback written; tag local-only (remote 403s
+  tag refs — operator pushes it; CI then packages it durably).
+- Rehearsal: cloud half timed live on the deployed build (766 ms approve→AFIS→QA→queue, QA
+  0.94, cleaned up); run-of-show + failure scripts + offline fallback written; the
+  Revit-half timing shortfall stated in the doc itself.
+- Docs: QUICKSTART + KNOWN_LIMITATIONS shipped in the package; the holdout number stated as
+  NOT YET MEASURED (the only honest value).
+- **Go/no-go: DELAY the customer-facing dry run** (cycle 4, unhedged, with the 5-item GO
+  gate: data terms · 10+ drawings + sealed holdout run once · one walkthrough execution ·
+  pinned Revit version in writing · one full rehearsal). Then ship with named caveats.
+- Triple verification: V1 caught 2 real machine-bound gaps (resolver, installer executable
+  after all) and fixed them pre-V2; V2 REFUTED with 8 more (all fixed/dispositioned above);
+  V3 green end-to-end. Fifth consecutive round in which V2 found something V1+V3 missed.
+
+HANDOFF (operator, in order): (1) push tag v0.5.0-rc1 → download the CI package artifact →
+GitHub Release → record hashes in ROLLBACK.md; (2) run WALKTHROUGH.md on clean Revit 2025
+(now also closes installer + license-in-Revit); (3) drawings through data gate #11 → batch
+kit → sealed holdout; (4) CVE pinned Revit version in writing; (5) run REHEARSAL.md once;
+(6) TELEGRAM_BOT_TOKEN if phone alerts wanted. Standing items: Sprint 001 fixtures, briefing
+docs into VCS, shop2revit archive, Authenticode cert (post-trial).
