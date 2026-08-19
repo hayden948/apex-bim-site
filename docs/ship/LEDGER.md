@@ -1227,3 +1227,35 @@ Build order: (1) Ed25519 licensing (ApexLicense + gate + signer tool + 4-state t
 stamp, SHA256SUMS, packaged zip built here); (3) tag + hashes + rollback doc; (4) timed
 cloud rehearsal + rehearsal script; (5) quickstart + limitations; (6) final re-evaluation +
 go/no-go; (7) V1/V2("find the assumption that only holds on your machine")/V3.
+
+### Cycle 1 close (wall clock 22:10 UTC — includes two operator-interrupt pauses; T0 21:26)
+
+Licensing BUILT and PROVEN in all four states. Evidence pasted:
+
+```
+PASS  license: valid file -> Valid                       PASS  license: tampered file -> Invalid
+PASS  license: expired file -> Expired                   PASS  license: tampered message names the cause
+PASS  license: the time gate is the clock, not the file  PASS  license: garbage -> Invalid, no throw
+PASS  license: test-key license rejected by the production key (keys are distinct)
+PASS  license: correctly signed wrong-product license rejected with its own message
+PASS  license: in-suite sign -> verify round trip
+PASS  license: no file on this machine -> Missing
+PASS  license: beside-DLL search finds the file; test-key content still rejected
+ALL TESTS PASSED        (both targets compile; net48 CS1701 unification warning only)
+```
+
+Production key custody: signing key + public key + two issued licenses (CVE trial to
+2026-11-30, Apex dev to 2027-12-31) stored in service-role-only app_config
+(license_signing_key_ed25519 / license_public_key_ed25519 / license_cve_trial /
+license_apex_dev — lengths 44/44/309/301 confirmed by SQL; stored CVE license md5
+1dfd4c11de0a3076235f78cc56cdda58 = local file md5, byte-identical round trip). Both issued
+licenses verified Valid against the EMBEDDED production key by a compiled checker:
+
+```
+cve-trial.apexlic: Valid — Cache Valley Electric — Meta EMT 11990 trial until 2026-11-30
+apex-dev.apexlic: Valid — Apex internal — Hayden dev/walkthrough until 2027-12-31
+```
+
+PROVEN: all four license states + gate code compiled into both targets. ASSUMED (named):
+TaskDialog rendering of the messages, and gate behavior inside real Revit — walkthrough gains
+a license step. Next: installer package (cycle 2).
