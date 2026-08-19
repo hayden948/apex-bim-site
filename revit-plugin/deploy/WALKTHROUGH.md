@@ -7,13 +7,20 @@ Revit, so the machine evidence is (a) the Revit **journal** this session records
 when done) and (b) the **per-run log files** (`%LOCALAPPDATA%\Apex\logs\run-*.log`). Screenshots
 optional; journal + logs are what the ledger needs.
 
-## Setup (5 min)
+## Setup (10 min)
 
-- [ ] 1. Copy `ApexBimStudio.dll` (net8 build) + `.addin` into
-  `%APPDATA%\Autodesk\Revit\Addins\2025\`. Start Revit — stay on the start screen, do NOT open
-  a project. **Expect:** tab **Apex BIM Studio**, panel **Submittals** with Review Submittal ·
-  Build Family · Batch Build, and all three CLICKABLE with no document open. (If they are
-  greyed out, that is a ship-blocking bug — report it.)
+- [ ] 1. Extract the `ApexBimStudio-<version>.zip` package and run
+  `powershell -ExecutionPolicy Bypass -File install.ps1 -RevitVersion 2025` — do NOT install a
+  license yet. **Expect:** "Package integrity: OK", the file list, and "NO LICENSE INSTALLED".
+  (This installer has NEVER run on a real Windows machine — you are its first verification;
+  any error here is ship-blocking, capture the exact text.)
+- [ ] 1b. Start Revit — stay on the start screen, do NOT open a project. **Expect:** tab
+  **Apex BIM Studio**, panel **Submittals** with Review Submittal · Build Family · Batch
+  Build, all three CLICKABLE with no document open. (Greyed out = ship-blocking bug.)
+- [ ] 1c. Click **Build Family** with no license installed. **Expect:** a dialog saying no
+  license file was found, naming the exact folder to put it in — NOT a crash, NOT a silent
+  no-op. Then put the `license.apexlic` Apex issued into `C:\ProgramData\Apex\`, restart
+  Revit, click **Build Family** again — **expect** the file picker to open (licensed).
 - [ ] 2. Make `C:\apex\walkthrough\` and copy in the six specs from
   `schemas/familyspec/fixtures/golden/` plus the two prepared failures from
   `schemas/familyspec/fixtures/demo/` (`zz-corrupt.pred.json`, `zz-depth-miss.pred.json`).

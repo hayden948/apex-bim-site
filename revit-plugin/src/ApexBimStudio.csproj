@@ -19,9 +19,9 @@
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <!-- Revit add-in: the Revit process provides the runtime; never publish self-contained. -->
     <SelfContained>false</SelfContained>
-    <Version>0.4.0</Version>
-    <FileVersion>0.4.0.0</FileVersion>
-    <InformationalVersion>0.4.0</InformationalVersion>
+    <Version>0.5.0</Version>
+    <FileVersion>0.5.0.0</FileVersion>
+    <InformationalVersion>0.5.0</InformationalVersion>
     <Company>Apex</Company>
     <Product>Apex BIM Studio</Product>
     <Description>Apex BIM Studio Revit plugin</Description>

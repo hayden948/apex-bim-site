@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Assemble the Apex BIM Studio install package (round 5).
+#
+#   make-package.sh <version> <net48-bin-dir> <net8-bin-dir> <out-dir>
+#
+# The bin dirs are `dotnet build -c Release` outputs (CopyLocalLockFileAssemblies
+# is on, so every runtime dependency is already beside the DLL). The CANONICAL
+# customer package must be assembled from the Windows CI artifacts of the tagged
+# release commit — a package assembled from any other build is for testing only.
+# Layout produced:
+#   ApexBimStudio-<version>/
+#     install.ps1 uninstall.ps1 README.txt ApexBimStudio.addin
+#     net48/  (Revit 2022–2024)      net8/  (Revit 2025+)
+#     SHA256SUMS.txt                 (verified by install.ps1 before any copy)
+set -euo pipefail
+VER="$1"; N48="$2"; N8="$3"; OUT="$4"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+PKG="$OUT/ApexBimStudio-$VER"
+rm -rf "$PKG"; mkdir -p "$PKG/net48" "$PKG/net8"
+cp "$N48"/*.dll "$PKG/net48/"
+cp "$N8"/*.dll "$PKG/net8/"
+# Reference-only Revit API assemblies must never ship (license + version safety).
+rm -f "$PKG"/net*/RevitAPI.dll "$PKG"/net*/RevitAPIUI.dll
+cp "$HERE/install.ps1" "$HERE/uninstall.ps1" "$PKG/"
+cp "$HERE/../ApexBimStudio.addin" "$PKG/"
+cp "$HERE/README.txt" "$PKG/" 2>/dev/null || true
+( cd "$PKG" && find . -type f ! -name SHA256SUMS.txt -print0 | sort -z \
+  | xargs -0 sha256sum | sed 's|\./||' > SHA256SUMS.txt )
+( cd "$OUT" && rm -f "ApexBimStudio-$VER.zip" \
+  && python3 -c "import shutil; shutil.make_archive('ApexBimStudio-$VER','zip','.', 'ApexBimStudio-$VER')" )
+echo "package: $OUT/ApexBimStudio-$VER.zip"
+sha256sum "$OUT/ApexBimStudio-$VER.zip"
