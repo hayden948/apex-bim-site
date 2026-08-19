@@ -24,6 +24,7 @@ rm -f "$PKG"/net*/RevitAPI.dll "$PKG"/net*/RevitAPIUI.dll
 cp "$HERE/install.ps1" "$HERE/uninstall.ps1" "$PKG/"
 cp "$HERE/../ApexBimStudio.addin" "$PKG/"
 cp "$HERE/README.txt" "$PKG/" 2>/dev/null || true
+cp "$HERE/../QUICKSTART.md" "$HERE/../KNOWN_LIMITATIONS.md" "$PKG/" 2>/dev/null || true
 ( cd "$PKG" && find . -type f ! -name SHA256SUMS.txt -print0 | sort -z \
   | xargs -0 sha256sum | sed 's|\./||' > SHA256SUMS.txt )
 ( cd "$OUT" && rm -f "ApexBimStudio-$VER.zip" \
