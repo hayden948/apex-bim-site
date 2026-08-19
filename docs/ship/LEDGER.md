@@ -1299,3 +1299,92 @@ suspension pattern as round 2. Focused work elapsed is ~50 min of the 120-min bu
 round continues to close-out per the round-2 precedent. New-inputs re-check after the gap
 (pasted): origin/main still f588c95, branch clean at 833aba9, DB still 7 uploads (latest
 2026-08-12) — a full day passed and STILL zero Meta EMT 11990 drawings.
+
+### Cycle 3 close (21:10 UTC Wed) — rehearsal, release identity, rollback
+
+**Timed cloud-half rehearsal (live, deployed api v29, demo project; all rows cleaned up after
+— DB back to 7 uploads / 5 families / 1 queued job, verified by count):**
+
+```
+GET /v1/health                        -> 200 {"ok":true,...,"telegram_alerts":false}  (<1 s)
+POST .../approve?chain=1 (one click)  -> 201 in 766 ms
+  family "Square D NQ430L2C ... (2)" created; QA passed score 0.94 (0 errors, 1 warning)
+  job ada467d2 kind=generate_rfa status=queued (verified by row)
+```
+
+Extraction stage deliberately NOT re-timed (no submittal PDF exists in this container — the
+round-1 scratch copy died with that container; a re-run costs a paid model call). Corrupt-
+input failure path was 1.4 s (R3). The rehearsal record + 20-min run-of-show + scripted
+failure responses + offline fallback: docs/ship/REHEARSAL.md. Unrehearsed parts named there.
+
+**Release identity:** commit 314db99, version 0.5.0.
+Package ApexBimStudio-0.5.0-rc1.zip (installer + both builds + deps + docs):
+sha256 bbfa84b6731da50a04c997a44b9ca9e7466a75ee6a2d8da29f2ecabb949aaabc
+(zip hashes vary per assembly run — mtimes; the per-file SHA256SUMS.txt inside is the stable
+integrity source, and install.ps1 enforces it).
+DLL hashes: net48 ApexBimStudio.dll 25f4a1787c21a4726657b6d6fad8c5380bfb96078287588d241c0fd1618e262d;
+net8 ApexBimStudio.dll b5a76e1c2d65c3e083e9f71a07ac03e18b5c433838a4937cbe9b58fc5c4c9cd0.
+**Tag v0.5.0-rc1 created locally; the remote REFUSES tag pushes from this session (403, twice;
+`git ls-remote refs/tags/*` empty) — pushing the tag is a 1-command OPERATOR action, recorded
+as such. The release is unambiguously identified by commit 314db99 + the hashes above.**
+Rollback: docs/ship/ROLLBACK.md (add-in only creates files — uninstall never risks the model).
+
+### Cycle 4 — FINAL RE-EVALUATION (the round's point; register re-read end to end)
+
+Evidence per gap claimed closed or moved (register row → evidence):
+- #3 schema integrity CLOSED (R2): contract test + parity checker each PROVEN able to fail
+  (break/revert pasted R2 C1); 6/6 golden round-trip jsonb equality (R2 C3); live 400 naming
+  geometry.width.value.
+- #6 QA coverage PARTIAL (R2/R3): FamilySpec validation at every boundary with named-field
+  errors (R2 proofs); P-4/S-2/G-1 proven to FAIL on crafted bad AFIS live (R3 C4). Remaining
+  rules untested — still open.
+- #7 failure-in-front-of-customer PARTIAL (R4/R5): customer-language dialogs/report/log trio
+  (R4, tested, in-Revit rendering pending); license states with named remedies (R5 C1, 17
+  asserts); Telegram alerts still DARK (token unset — health paste above).
+- #2 harness: code+kit BUILT (R3/R4), execution HUMAN-VERIFY — walkthrough is the vehicle.
+- #8 install/licensing MOVED (R5): Ed25519 licensing EXISTS and is proven in all four states
+  (was: zero grep hits); installer + clean uninstall + integrity gate BUILT; package
+  assembled with hashes. STILL OPEN inside #8: installer NEVER EXECUTED (named ship
+  blocker); DLLs are NOT Authenticode-signed (SmartScreen risk on managed machines;
+  install.ps1 Unblock-File mitigates per-user installs only); .addin vendor URL still a
+  placeholder.
+- #1 drawings, #11 data/NDA, #12 pinned Revit version: UNCHANGED AND OPEN — no round can
+  close them from a container; they are operator/legal actions.
+- #13/#14 demo-day chain: scripted in REHEARSAL.md preflight (worker named+awake, session
+  re-auth, offline fallback) — scripted is not rehearsed; open until run once.
+- #15 input limits: documented to the customer in KNOWN_LIMITATIONS.md; the upload gate
+  itself still accepts more than extraction can chew — engineering item open.
+- #16 site consistency: untouched, open (minor).
+
+**(a) Single most likely way the CVE dry run goes badly, and is it mitigated?**
+The first real Meta EMT 11990 drawing enters the pipeline LIVE, in front of CVE, and is
+something the extractor has never seen — an EMT/conduit class with no extractor, or a
+40-unit combined package — and the demo's first real act is a failure or, worse, uploading
+the drawing is itself an NDA breach (#11 unresolved). NOT MITIGATED and not mitigable by
+code: the only mitigation is sequencing — drawings through the data gate and the batch kit
+BEFORE any customer-facing date. Every in-product mitigation built in rounds 2–4 (review,
+containment, honest reports) activates only AFTER a drawing gets in legitimately.
+
+**(b) What did five rounds NOT get to, and does it matter for this trial?**
+(1) Accuracy on real drawings — the product's core claim; trial-fatal if still unknown on
+day one. (2) The data-handling/NDA decision — trial-fatal (legal, not technical).
+(3) Any human executing the Revit half, the installer, or licensing in Revit — one 25-minute
+walkthrough closes it; unacceptable to skip. (4) Authenticode signing — matters on CVE's
+IT-managed machines; caveat-able for a supervised trial. (5) Multi-unit splitting, category→
+template mapping, OAuth endpoints, marketing-site consistency — named caveats, not blockers.
+
+**(c) Ship, ship with named caveats, or delay?**
+**DELAY the customer-facing dry run. Recommend against shipping to CVE now.** Reason: the
+10-week kill/scale gate needs a real signal; today the pipeline has processed ZERO real
+drawings, the legal basis for uploading them is unresolved, and no human has ever executed
+the installer, the license flow in Revit, or any Revit-side step. Going live now converts
+unknown accuracy plus unexecuted UX into customer-facing risk with no information gain that
+an internal run wouldn't produce more cheaply. This is a sequencing delay, not a rebuild:
+the GO gate is (1) data terms agreed (#11); (2) 10+ real drawings through the batch kit,
+holdout sealed then run once — its rate goes on the limitations page; (3) WALKTHROUGH.md
+executed once on clean Revit 2025 (closes installer + licensing + Revit-half in one
+sitting); (4) CVE's pinned Revit version in writing (#12); (5) REHEARSAL.md run once.
+Estimate: 1–2 weeks, dominated by operator/legal actions, near-zero engineering. When those
+five pass: SHIP WITH NAMED CAVEATS (KNOWN_LIMITATIONS.md as written, holdout number filled
+in). If real drawings surface classes outside the extractor, the kill/scale question answers
+itself before CVE ever sees a failure — which is the cheap version of the signal.
