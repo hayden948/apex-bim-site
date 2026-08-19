@@ -21,6 +21,16 @@ cp "$N48"/*.dll "$PKG/net48/"
 cp "$N8"/*.dll "$PKG/net8/"
 # Reference-only Revit API assemblies must never ship (license + version safety).
 rm -f "$PKG"/net*/RevitAPI.dll "$PKG"/net*/RevitAPIUI.dll
+# Refuse to produce a package that would install cleanly and then fail at
+# first click (round-5 adversarial finding 1): every runtime dependency the
+# code binds must be present in the folder it ships from.
+for f in ApexBimStudio.dll BouncyCastle.Cryptography.dll System.Security.Cryptography.ProtectedData.dll; do
+  [ -f "$PKG/net48/$f" ] || { echo "FATAL: net48/$f missing — incomplete build output; not packaging." >&2; exit 1; }
+  [ -f "$PKG/net8/$f" ]  || { echo "FATAL: net8/$f missing — incomplete build output; not packaging." >&2; exit 1; }
+done
+for f in System.Text.Json.dll System.Memory.dll System.Buffers.dll System.Text.Encodings.Web.dll; do
+  [ -f "$PKG/net48/$f" ] || { echo "FATAL: net48/$f missing (STJ dependency chain) — not packaging." >&2; exit 1; }
+done
 cp "$HERE/install.ps1" "$HERE/uninstall.ps1" "$PKG/"
 cp "$HERE/../ApexBimStudio.addin" "$PKG/"
 cp "$HERE/README.txt" "$PKG/" 2>/dev/null || true

@@ -50,8 +50,11 @@ drawing has ever entered the pipeline**, so the timings below come from fixture 
 
 ## Not rehearsed, stated plainly
 
-Upload→extraction on a REAL CVE drawing (none exist in the pipeline; also blocked by the
-data-handling/NDA gate, register #11); every Revit-side step (walkthrough pending); the
-installer (never executed); Telegram alerts (token unset). The first true end-to-end
-rehearsal = walkthrough + one real drawing through the gate — schedule it BEFORE any
-customer-facing date.
+The brief asked for the rehearsal "on the packaged build"; without Revit, only the CLOUD half
+of the packaged system (the deployed api — the same build CVE would hit) could be timed. Still
+outstanding: upload→extraction on a REAL CVE drawing (none exist in the pipeline; also blocked
+by the data-handling/NDA gate, register #11); every Revit-side step (walkthrough pending); the
+installer's WINDOWS reality (its full logic has been executed under PowerShell 7.4 on Linux —
+LEDGER R5 C5 — but Windows PowerShell 5.1, Unblock-File, ACLs, and Revit loading the DLLs have
+not run anywhere); Telegram alerts (token unset). The first true end-to-end rehearsal =
+walkthrough + one real drawing through the gate — schedule it BEFORE any customer-facing date.

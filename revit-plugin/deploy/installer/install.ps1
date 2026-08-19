@@ -1,4 +1,4 @@
-<#
+﻿<#
 Apex BIM Studio — installer (round 5).
 Run from an extracted package folder, in a normal PowerShell (no admin needed):
 
@@ -17,7 +17,7 @@ What it does, in order:
 Nothing else is touched. Uninstall: uninstall.ps1 in this folder.
 #>
 param(
-    [ValidateSet("2022","2023","2024","2025","2026")]
+    [ValidateSet("2022","2023","2024","2025")]
     [string]$RevitVersion = "2025",
     [string]$LicenseFile = ""
 )

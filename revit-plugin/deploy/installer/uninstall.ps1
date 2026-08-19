@@ -1,4 +1,4 @@
-<#
+﻿<#
 Apex BIM Studio — clean uninstall (round 5).
 
     powershell -ExecutionPolicy Bypass -File uninstall.ps1 -RevitVersion 2025
@@ -11,7 +11,7 @@ yours, and reinstalling picks the license straight back up):
 Families you built (.rfa), build reports, and your drawings are NEVER touched.
 #>
 param(
-    [ValidateSet("2022","2023","2024","2025","2026")]
+    [ValidateSet("2022","2023","2024","2025")]
     [string]$RevitVersion = "2025",
     [switch]$RemoveLicense,
     [switch]$RemoveLogs

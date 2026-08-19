@@ -6,6 +6,6 @@
     <AddInId>7A1E9D40-52C3-4D8B-9C61-0D2F84A6B7E1</AddInId>
     <FullClassName>Apex.BimStudio.ApexApplication</FullClassName>
     <VendorId>APEX</VendorId>
-    <VendorDescription>Apex BIM Studio, https://apexbim.example</VendorDescription>
+    <VendorDescription>Apex BIM Studio, https://github.com/hayden948/apex-bim-site</VendorDescription>
   </AddIn>
 </RevitAddIns>

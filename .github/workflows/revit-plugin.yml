@@ -3,6 +3,7 @@ name: Build Revit plugin
 on:
   push:
     paths: ["revit-plugin/**"]
+    tags: ["v*"]
   pull_request:
     paths: ["revit-plugin/**"]
   workflow_dispatch:
@@ -19,10 +20,29 @@ jobs:
         run: dotnet build revit-plugin/src/ApexBimStudio.csproj -c Release
       - name: Run logic tests
         run: dotnet run -c Release --project revit-plugin/tests/ApexBimStudio.Tests.csproj
-      - name: Upload artifacts
+      # The customer package is assembled HERE, from the version-stamped
+      # dotnet build output with every runtime dependency beside the DLL —
+      # never from a dev machine (round-5 adversarial finding: artifact-only
+      # DLL uploads made the documented package procedure produce a broken
+      # install). make-package.sh also hard-fails if a required dependency
+      # is missing from either build folder.
+      - name: Assemble install package
+        shell: bash
+        run: |
+          VER=$(grep -oP '(?<=<Version>)[^<]+' revit-plugin/src/ApexBimStudio.csproj)
+          bash revit-plugin/deploy/installer/make-package.sh "$VER" \
+            revit-plugin/src/bin/Release/net48 \
+            revit-plugin/src/bin/Release/net8.0-windows \
+            package-out
+      - name: Upload install package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ApexBimStudio-package
+          path: package-out/*.zip
+      - name: Upload bare build folders
         uses: actions/upload-artifact@v4
         with:
           name: ApexBimStudio
           path: |
-            revit-plugin/src/bin/Release/net48/ApexBimStudio.dll
-            revit-plugin/src/bin/Release/net8.0-windows/ApexBimStudio.dll
+            revit-plugin/src/bin/Release/net48/
+            revit-plugin/src/bin/Release/net8.0-windows/

@@ -28,6 +28,22 @@ static class Signer
             Console.WriteLine("public_b64=" + Convert.ToBase64String(pub));
             return 0;
         }
+        if (args.Length == 3 && args[0] == "verify")
+        {
+            // verify <pubB64> <licenseFile> — re-check any issued license against
+            // any public key (e.g. the app_config production licenses against the
+            // key embedded in the shipped add-in) without touching Revit.
+            string text = System.IO.File.ReadAllText(args[2]).Trim();
+            string[] parts = text.Split('.');
+            if (parts.Length != 2) { Console.WriteLine("INVALID: not payload.signature"); return 1; }
+            byte[] payload = Convert.FromBase64String(parts[0]);
+            var verifier = new Ed25519Signer();
+            verifier.Init(false, new Ed25519PublicKeyParameters(Convert.FromBase64String(args[1]), 0));
+            verifier.BlockUpdate(payload, 0, payload.Length);
+            bool ok = verifier.VerifySignature(Convert.FromBase64String(parts[1]));
+            Console.WriteLine((ok ? "SIGNATURE OK: " : "SIGNATURE FAIL: ") + Encoding.UTF8.GetString(payload));
+            return ok ? 0 : 1;
+        }
         if (args.Length == 4 && args[0] == "sign")
         {
             var priv = new Ed25519PrivateKeyParameters(Convert.FromBase64String(args[1]), 0);
@@ -46,7 +62,7 @@ static class Signer
             Console.WriteLine(Convert.ToBase64String(payload) + "." + Convert.ToBase64String(sig));
             return 0;
         }
-        Console.Error.WriteLine("usage: keygen | sign <privB64> <licensee> <expiresIsoUtc>");
+        Console.Error.WriteLine("usage: keygen | sign <privB64> <licensee> <expiresIsoUtc> | verify <pubB64> <licenseFile>");
         return 2;
     }
 }
