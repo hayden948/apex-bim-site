@@ -1259,3 +1259,36 @@ apex-dev.apexlic: Valid — Apex internal — Hayden dev/walkthrough until 2027-
 PROVEN: all four license states + gate code compiled into both targets. ASSUMED (named):
 TaskDialog rendering of the messages, and gate behavior inside real Revit — walkthrough gains
 a license step. Next: installer package (cycle 2).
+
+### Cycle 2 close (20:50 UTC) — installer built; UNTESTED-INSTALLER named as ship blocker
+
+Installer kit committed (revit-plugin/deploy/installer/): integrity-gated install.ps1,
+uninstall.ps1, make-package.sh, README.txt. Package ApexBimStudio-0.5.0-rc1.zip ASSEMBLED here
+with full dependency sets and hashes:
+
+```
+net48/: ApexBimStudio, BouncyCastle, System.Text.Json + 8-dll dependency chain (Memory,
+        Buffers, ValueTuple, Numerics.Vectors, Tasks.Extensions, CompilerServices.Unsafe,
+        Bcl.AsyncInterfaces, Encodings.Web)
+net8/:  ApexBimStudio, BouncyCastle, ProtectedData
+zip sha256: 68337587bb9556a363bd89fb450692db995c51f25257026e9efe28783e4e9f88
+$ sha256sum -c SHA256SUMS.txt  -> all OK
+negative control: 1 byte flipped in net8/ApexBimStudio.dll -> "FAILED ... did NOT match";
+restored -> all OK
+```
+
+**STATED PLAINLY, per the brief's own rule: NO clean Windows environment, VM, or fresh user
+profile exists in this container — this installer has NEVER been executed. An untested
+installer is a SHIP BLOCKER until walkthrough step 1 runs on a real machine.** Two further
+honesty notes: (a) the zip above is assembled from this container's csc builds — the CANONICAL
+customer package must be assembled by make-package.sh from the Windows CI artifacts of the
+tagged commit (procedure in the rollback doc, next cycle); (b) install.ps1 is PowerShell
+running on Windows — nothing here can execute it; its logic was verified only by the
+sha256sum equivalence above.
+
+RE-EVALUATION (protocol, cycle 2): (a) still highest-value path — yes: licensing and installer
+were the two EXIT items buildable here; remaining EXIT items are docs + tag + rehearsal +
+verdict, all planned. (b) learned: BCL has no Ed25519 → BouncyCastle dependency now ships with
+the add-in (installer accounts for it); www.nuget.org is proxy-blocked but api.nuget.org
+works. (c) avoiding nothing identified; the uncomfortable item (go/no-go against shipping) is
+scheduled for cycle 4 and will be answered without hedging.
