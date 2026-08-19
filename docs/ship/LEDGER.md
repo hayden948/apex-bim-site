@@ -1292,3 +1292,10 @@ verdict, all planned. (b) learned: BCL has no Ed25519 → BouncyCastle dependenc
 the add-in (installer accounts for it); www.nuget.org is proxy-blocked but api.nuget.org
 works. (c) avoiding nothing identified; the uncomfortable item (go/no-go against shipping) is
 scheduled for cycle 4 and will be answered without hedging.
+
+**WALL-CLOCK NOTE (protocol rule 1 — never estimate from memory):** the session was suspended
+~22.5 h between cycle-1 close (Tue 22:10 UTC) and cycle-2 close (Wed 20:50 UTC) — the same
+suspension pattern as round 2. Focused work elapsed is ~50 min of the 120-min budget; the
+round continues to close-out per the round-2 precedent. New-inputs re-check after the gap
+(pasted): origin/main still f588c95, branch clean at 833aba9, DB still 7 uploads (latest
+2026-08-12) — a full day passed and STILL zero Meta EMT 11990 drawings.
