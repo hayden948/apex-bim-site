@@ -1388,3 +1388,41 @@ Estimate: 1–2 weeks, dominated by operator/legal actions, near-zero engineerin
 five pass: SHIP WITH NAMED CAVEATS (KNOWN_LIMITATIONS.md as written, holdout number filled
 in). If real drawings surface classes outside the extractor, the kill/scale question answers
 itself before CVE ever sees a failure — which is the cheap version of the signal.
+
+### Cycle 5 (21:10–21:20 UTC Wed) — V1 self-review + two fixes it forced
+
+**V1 found two only-works-on-my-machine assumptions and both were fixed before V2:**
+
+1. **No AssemblyResolve hook** (`grep -rln AssemblyResolve` → nothing): the net48 build ships
+   a 10-DLL dependency chain into a process (Revit 2022–2024) notorious for cross-add-in
+   version conflicts; LoadFrom probing usually works, "usually" is not evidence. Fixed:
+   explicit our-folder-first resolver in OnStartup (answers only for shipped files, logs when
+   it fires, detached on shutdown). Suite: 217 assertions, ALL TESTS PASSED, both targets.
+2. **"Installer never executed" was avoidable**: PowerShell 7.4.6 for Linux installs in the
+   container. The REAL install.ps1/uninstall.ps1 were then EXECUTED against the real package
+   with mocked %APPDATA%/%ProgramData% (pasted in full above this entry's commit; summary):
+
+```
+Package integrity: OK ... Installed net8 build for Revit 2025 ... LAYOUT OK
+Installed net48 build for Revit 2022 ... NET48 DEPS OK (11 DLLs incl. STJ chain)
+REFUSED: The package failed its integrity check ... INTEGRITY GATE OK: refused, nothing copied
+UNINSTALL OK: files gone, license kept then removed on request
+ALL INSTALLER CHECKS PASSED
+```
+
+The ship blocker NARROWS but STANDS: install/uninstall LOGIC is executed and proven; what no
+one has run is the WINDOWS reality — Windows PowerShell 5.1 (the script targets it; pwsh ≠
+5.1), Unblock-File (stubbed here; Windows-only), real profile paths, and Revit actually
+loading the installed DLLs. Walkthrough step 1 remains the gate.
+
+**V1 remaining unbackable claims (stated before V2):** license dialogs/gate inside real Revit
+(messages proven, rendering not); BouncyCastle net461 under Revit's CLR (resolver helps,
+first load is on the operator); the rehearsal cloud timing used the demo project +
+publishable key — CVE's own project/token path is preflight item 2; the rc zip is from this
+container's csc builds (canonical = CI artifacts of the tagged commit — ROLLBACK.md rule);
+tag is local-only (remote 403).
+
+Release identity FINAL for this round: commit 83efe13 (local tag v0.5.0-rc1 moved to it);
+zip 16c0cac0…, net48 dll f62c7468…, net8 dll 02474c0a… (full hashes in ROLLBACK.md).
+
+V2 launched: charge = find the assumption that only holds on this machine.
