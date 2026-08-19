@@ -39,6 +39,17 @@ public class BatchBuildCommand : IExternalCommand
 
         string? batchDir = Environment.GetEnvironmentVariable("APEX_BATCH_DIR");
         bool scripted = !string.IsNullOrWhiteSpace(batchDir);
+
+        // Round 5: licensed builds only. The message says exactly what to do;
+        // scripted (journal) runs must not stall on a dialog.
+        ApexLicense.Status lic = ApexLicense.CheckDefault();
+        if (lic.State != ApexLicense.State.Valid)
+        {
+            message = lic.Message;
+            ApexLog.Warn("Batch build blocked by license state " + lic.State + ".");
+            if (!scripted) TaskDialog.Show("Apex — license", lic.Message);
+            return Result.Failed;
+        }
         if (!scripted)
         {
             var dlg = new OpenFileDialog

@@ -170,6 +170,7 @@ class TestMain
         RunSpecReviewTests();
         RunCustomerReportTests();
         RunRunLogTests();
+        RunLicenseTests();
 
         Console.WriteLine(_failures == 0 ? "\nALL TESTS PASSED" : $"\n{_failures} FAILURES");
         return _failures == 0 ? 0 : 1;
@@ -744,5 +745,104 @@ class TestMain
         ApexLog.Info("runlog stray line");
         AssertTrue(!System.IO.File.ReadAllText(p).Contains("runlog stray line"),
             "runlog: nothing lands in the run file after the run ends");
+    }
+
+    // ---------- Round 5: Ed25519 offline licensing — all four states ----------
+
+    static void RunLicenseTests()
+    {
+        string? dir = FindRepoFile(System.IO.Path.Combine(
+            "revit-plugin", "tests", "fixtures", "license"));
+        AssertTrue(dir != null, "license: fixture dir located");
+        if (dir == null) return;
+        string F(string n) => System.IO.File.ReadAllText(System.IO.Path.Combine(dir, n));
+        byte[] testPub = Convert.FromBase64String(F("TEST_PUBLIC_KEY.b64").Trim());
+        var now = new DateTime(2026, 8, 18, 0, 0, 0, DateTimeKind.Utc);
+
+        // State 1: VALID
+        var valid = ApexLicense.Verify(F("valid.apexlic"), testPub, now);
+        AssertTrue(valid.State == ApexLicense.State.Valid, "license: valid file -> Valid");
+        AssertTrue(valid.Licensee == "Test Licensee (fixtures only)", "license: licensee surfaced");
+        AssertTrue(valid.Message.Contains("2030-01-01"), "license: valid message names the expiry date");
+
+        // State 2: EXPIRED — and the SAME valid file expires when the clock passes it.
+        var expired = ApexLicense.Verify(F("expired.apexlic"), testPub, now);
+        AssertTrue(expired.State == ApexLicense.State.Expired, "license: expired file -> Expired");
+        AssertTrue(expired.Message.Contains("2025-01-01") && expired.Message.Contains("renew"),
+            "license: expired message names the date and the remedy");
+        AssertTrue(ApexLicense.Verify(F("valid.apexlic"), testPub,
+                new DateTime(2031, 1, 1, 0, 0, 0, DateTimeKind.Utc)).State == ApexLicense.State.Expired,
+            "license: the time gate is the clock, not the file");
+
+        // State 3: TAMPERED — payload altered, signature intact.
+        var tampered = ApexLicense.Verify(F("tampered.apexlic"), testPub, now);
+        AssertTrue(tampered.State == ApexLicense.State.Invalid,
+            "license: tampered file -> Invalid");
+        AssertTrue(tampered.Message.Contains("signature does not match"),
+            "license: tampered message names the cause");
+
+        // Garbage and empty are Invalid with the same customer message, never a throw.
+        AssertTrue(ApexLicense.Verify("not a license at all", testPub, now).State == ApexLicense.State.Invalid,
+            "license: garbage -> Invalid, no throw");
+        AssertTrue(ApexLicense.Verify("", testPub, now).State == ApexLicense.State.Invalid,
+            "license: empty -> Invalid, no throw");
+
+        // A TEST-key license must NOT validate against the PRODUCTION key.
+        AssertTrue(ApexLicense.Verify(F("valid.apexlic"),
+                Convert.FromBase64String(ApexLicense.ProductionPublicKeyB64), now).State
+                == ApexLicense.State.Invalid,
+            "license: test-key license rejected by the production key (keys are distinct)");
+
+        // Wrong product: sign a fresh license in-suite (full sign->verify round trip).
+        byte[] testPriv = Convert.FromBase64String(F("TEST_PRIVATE_KEY.b64").Trim());
+        string Sign(object payloadObj)
+        {
+            byte[] payload = System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(payloadObj));
+            var s = new Org.BouncyCastle.Crypto.Signers.Ed25519Signer();
+            s.Init(true, new Org.BouncyCastle.Crypto.Parameters.Ed25519PrivateKeyParameters(testPriv, 0));
+            s.BlockUpdate(payload, 0, payload.Length);
+            return Convert.ToBase64String(payload) + "." + Convert.ToBase64String(s.GenerateSignature());
+        }
+        string wrongProduct = Sign(new
+        {
+            licensee = "T", product = "SomeOtherProduct",
+            issued_utc = "2026-01-01T00:00:00Z", expires_utc = "2030-01-01T00:00:00Z",
+        });
+        var wp = ApexLicense.Verify(wrongProduct, testPub, now);
+        AssertTrue(wp.State == ApexLicense.State.Invalid && wp.Message.Contains("different Apex product"),
+            "license: correctly signed wrong-product license rejected with its own message");
+        string roundTrip = Sign(new
+        {
+            licensee = "Round Trip", product = "ApexBimStudio",
+            issued_utc = "2026-01-01T00:00:00Z", expires_utc = "2030-01-01T00:00:00Z",
+        });
+        AssertTrue(ApexLicense.Verify(roundTrip, testPub, now).State == ApexLicense.State.Valid,
+            "license: in-suite sign -> verify round trip");
+
+        // State 4: MISSING — this container has no license anywhere CheckDefault looks.
+        ApexLicense.ResetCache();
+        var missing = ApexLicense.CheckDefault();
+        AssertTrue(missing.State == ApexLicense.State.Missing,
+            "license: no file on this machine -> Missing");
+        AssertTrue(missing.Message.Contains("license.apexlic") && missing.Message.Contains("restart Revit"),
+            "license: missing message says which file, where, and what to do");
+
+        // Drop a TEST-key license beside the assembly: found, but rejected by
+        // the production key — proves both the search path and the key split.
+        string beside = System.IO.Path.Combine(
+            System.IO.Path.GetDirectoryName(typeof(ApexLicense).Assembly.Location) ?? ".",
+            ApexLicense.FileName);
+        try
+        {
+            System.IO.File.WriteAllText(beside, F("valid.apexlic"));
+            ApexLicense.ResetCache();
+            AssertTrue(ApexLicense.CheckDefault().State == ApexLicense.State.Invalid,
+                "license: beside-DLL search finds the file; test-key content still rejected");
+        }
+        finally
+        {
+            System.IO.File.Delete(beside);
+            ApexLicense.ResetCache();
+        }
     }
 }

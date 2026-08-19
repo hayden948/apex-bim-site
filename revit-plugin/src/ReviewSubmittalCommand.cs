@@ -26,6 +26,14 @@ public class ReviewSubmittalCommand : IExternalCommand
     {
         Application app = commandData.Application.Application;
 
+        ApexLicense.Status lic = ApexLicense.CheckDefault();
+        if (lic.State != ApexLicense.State.Valid)
+        {
+            message = lic.Message;
+            TaskDialog.Show("Apex — license", lic.Message);
+            return Result.Failed;
+        }
+
         var dlg = new OpenFileDialog
         {
             Title = "Open an extracted equipment spec to review",

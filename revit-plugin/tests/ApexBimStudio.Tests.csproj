@@ -24,6 +24,7 @@
     <PackageReference Include="Nice3point.Revit.Api.RevitAPI" Version="2025.*" />
     <PackageReference Include="Nice3point.Revit.Api.RevitAPIUI" Version="2025.*" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+    <PackageReference Include="BouncyCastle.Cryptography" Version="2.4.0" />
   </ItemGroup>
 
 </Project>
