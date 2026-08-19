@@ -2,8 +2,12 @@ name: Build Revit plugin
 
 on:
   push:
-    paths: ["revit-plugin/**"]
+    # branches AND tags must both be listed: specifying tags alone silently
+    # stops branch pushes from triggering (this bit us on a9a604b — no run).
+    # Path filters are ignored for tag pushes, so tags always build.
+    branches: ["**"]
     tags: ["v*"]
+    paths: ["revit-plugin/**", ".github/workflows/revit-plugin.yml"]
   pull_request:
     paths: ["revit-plugin/**"]
   workflow_dispatch:
