@@ -14,12 +14,19 @@ across runs (LEDGER R6 C2); THIS artifact is the release.
 
 - [ ] 0. **THE anchor check (do this before trusting anything inside the download, including
   install.ps1):** the artifact zip contains `ApexBimStudio-0.5.0-rc1.zip`. In PowerShell:
-  `Get-FileHash ApexBimStudio-0.5.0-rc1.zip` — the hash MUST be
-  `A49474110CA0BEF302E147D7AE76993B0E8E3BCB1ADA71C0C01BD843FA8AC280`
-  (recorded in LEDGER R6; a different green run at the SAME commit produces a different hash —
-  run 33's is E071BC4D… — so this one check is what pins "this artifact, this run", which
-  RELEASE.txt alone cannot). Then check `RELEASE.txt` commit == 32bcde4… .
+  `Get-FileHash ApexBimStudio-0.5.0-rc1.zip` — compare against **your out-of-band copy of the
+  anchor hash** (sent to your Telegram on 2026-08-20; copy it into your password manager),
+  NOT against any hash printed inside the package, the repo, or this file — if the repo or
+  package were tampered with, so were the hashes they carry. (A different green run at the
+  SAME commit produces a different hash, so this one check pins "this artifact, this run",
+  which RELEASE.txt alone cannot.) Then check `RELEASE.txt` commit == 32bcde4… .
   FAIL either → STOP; screenshot the hash + RELEASE.txt + the run page.
+- [ ] 0a. **Shell self-test (~30 s, makes no changes):** from your REPO checkout (the packaged
+  installer predates this switch), in a plain PowerShell (the default 5.1 is exactly what
+  this validates):
+  `powershell -ExecutionPolicy Bypass -File revit-plugin\deploy\installer\install.ps1 -SelfTest -PackageDir <extracted package folder>`
+  **Expect:** "SELF-TEST PASSED". Any FAIL line → STOP and send the exact output; nothing has
+  touched Revit paths yet.
 - [ ] 0b. Push the tag (this closes the never-fired `v*` trigger too):
   `git tag v0.5.0-rc1 32bcde4efe52efd922e4f08df5e0a660f2c557b0 && git push origin v0.5.0-rc1`
   → within ~2 min a new "Build Revit plugin" run should START. That run only verifies the

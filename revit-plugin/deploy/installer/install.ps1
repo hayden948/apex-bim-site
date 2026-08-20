@@ -19,10 +19,52 @@ Nothing else is touched. Uninstall: uninstall.ps1 in this folder.
 param(
     [ValidateSet("2022","2023","2024","2025")]
     [string]$RevitVersion = "2025",
-    [string]$LicenseFile = ""
+    [string]$LicenseFile = "",
+    [switch]$SelfTest,
+    [string]$PackageDir = ""
 )
 $ErrorActionPreference = "Stop"
-$pkg = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+# Shell gate: Windows PowerShell 5.1 (a clean machine's default) and
+# PowerShell 7+ are supported. Anything older fails HERE, clearly, not
+# halfway through an install. (Statically audited for 5.1: no ternary,
+# null-coalescing, or chain operators anywhere in this script — those break
+# 5.1 at parse time, before any line runs.)
+$psv = $PSVersionTable.PSVersion
+if ($psv.Major -lt 5 -or ($psv.Major -eq 5 -and $psv.Minor -lt 1)) {
+    Write-Host "This installer needs Windows PowerShell 5.1 or PowerShell 7+. This shell is $psv."
+    exit 1
+}
+
+$pkg = if ($PackageDir -ne "") { $PackageDir } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+
+if ($SelfTest) {
+    # ~30-second machine readiness check. Makes NO changes to Revit or Apex
+    # files (one temp probe file in %APPDATA%, deleted immediately).
+    Write-Host "Apex installer self-test (no install actions will be taken)"
+    Write-Host ("  shell: PowerShell " + $psv + " - supported")
+    $sums = Join-Path $pkg "SHA256SUMS.txt"
+    if (-not (Test-Path $sums)) {
+        Write-Host "  FAIL: SHA256SUMS.txt not found in '$pkg'. Run with -PackageDir <extracted package folder>."
+        exit 1
+    }
+    $rows = @(Get-Content $sums | Where-Object { $_.Trim() -ne "" })
+    Write-Host ("  manifest: readable, " + $rows.Count + " entries")
+    $probeHash = (Get-FileHash -Algorithm SHA256 $sums).Hash
+    Write-Host ("  hashing: Get-FileHash works (manifest self-hash " + $probeHash.Substring(0, 12) + "...)")
+    $probeFile = Join-Path $env:APPDATA ("apex-selftest-" + [guid]::NewGuid().ToString("N") + ".tmp")
+    Set-Content -Path $probeFile -Value "probe"
+    Remove-Item -Force $probeFile
+    Write-Host ("  write access: OK under " + $env:APPDATA)
+    $addins = Join-Path $env:APPDATA "Autodesk\Revit\Addins\$RevitVersion"
+    if (Test-Path $addins) { Write-Host ("  Revit $RevitVersion addins folder: exists (" + $addins + ")") }
+    else { Write-Host ("  Revit $RevitVersion addins folder: will be created at install (" + $addins + ")") }
+    $licDir = Join-Path $env:ProgramData "Apex"
+    if (Test-Path $licDir) { Write-Host ("  license folder: exists (" + $licDir + ")") }
+    else { Write-Host ("  license folder: will be created at install; if that fails on a shared machine, an admin places the license") }
+    Write-Host "SELF-TEST PASSED - this shell can run the installer."
+    exit 0
+}
 
 Write-Host "Apex BIM Studio installer — package: $pkg"
 

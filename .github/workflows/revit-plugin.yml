@@ -19,7 +19,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "8.0.x"
+          # Pinned via global.json (rollForward: disable) so every runner
+          # builds with the exact SDK the designated artifact used — restores
+          # cross-runner byte-reproducibility (mini-round item 1). "8.0.x"
+          # here would install whatever patch is current and then FAIL the
+          # build under the pin once the runner's patch moves past 8.0.424.
+          global-json-file: ./global.json
       - name: Build (net48 + net8.0-windows)
         run: dotnet build revit-plugin/src/ApexBimStudio.csproj -c Release
       - name: Run logic tests
