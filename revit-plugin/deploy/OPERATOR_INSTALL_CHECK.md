@@ -12,12 +12,24 @@ names). If it doesn't, STOP: wrong artifact (tag-is-truth rule; don't install it
 substitute another run's artifact even from the same commit — builds are not byte-reproducible
 across runs (LEDGER R6 C2); THIS artifact is the release.
 
-- [ ] 0. `RELEASE.txt` commit == 32bcde4… . FAIL → screenshot RELEASE.txt + the tag page.
-- [ ] 0b. First, push the tag (this closes the never-fired `v*` trigger too):
+- [ ] 0. **THE anchor check (do this before trusting anything inside the download, including
+  install.ps1):** the artifact zip contains `ApexBimStudio-0.5.0-rc1.zip`. In PowerShell:
+  `Get-FileHash ApexBimStudio-0.5.0-rc1.zip` — the hash MUST be
+  `A49474110CA0BEF302E147D7AE76993B0E8E3BCB1ADA71C0C01BD843FA8AC280`
+  (recorded in LEDGER R6; a different green run at the SAME commit produces a different hash —
+  run 33's is E071BC4D… — so this one check is what pins "this artifact, this run", which
+  RELEASE.txt alone cannot). Then check `RELEASE.txt` commit == 32bcde4… .
+  FAIL either → STOP; screenshot the hash + RELEASE.txt + the run page.
+- [ ] 0b. Push the tag (this closes the never-fired `v*` trigger too):
   `git tag v0.5.0-rc1 32bcde4efe52efd922e4f08df5e0a660f2c557b0 && git push origin v0.5.0-rc1`
-  → within ~2 min a new "Build Revit plugin" run should START (that run verifies the trigger;
-  the DESIGNATED artifact above remains the one you install). No run appears → record that;
-  the trigger defect goes back to engineering.
+  → within ~2 min a new "Build Revit plugin" run should START. That run only verifies the
+  trigger — its artifact will NOT match the step-0 hash and must not be installed; the
+  DESIGNATED artifact above is the release. No run appears → record that; the trigger defect
+  goes back to engineering.
+- [ ] 0c. Attach the DESIGNATED zip to a GitHub Release on the tag (artifacts expire
+  2026-11-18): upload the exact file whose hash passed step 0, then re-download it from the
+  Release page and run `Get-FileHash` once more — same hash. This is the durable copy CVE's
+  install is traced to.
 
 ## Install (steps mirror QUICKSTART; expected state after each)
 

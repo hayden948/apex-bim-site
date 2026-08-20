@@ -16,6 +16,13 @@
   the SAME commit producing different ApexBimStudio.dll bytes (different runner SDK patches),
   so byte-reproducibility across builds is NOT claimed anywhere; identity is "this artifact,
   this run, this commit".
+- **Independent anchors (the check that pins the run, performed by the operator BEFORE
+  executing anything from the package):** inner zip `ApexBimStudio-0.5.0-rc1.zip` sha256
+  `a49474110ca0bef302e147d7ae76993b0e8e3bcb1ada71c0c01bd843fa8ac280` (printed by
+  make-package.sh in the run-34 log; run 33's differs: `e071bc4d…`); GitHub's artifact digest
+  for 9416585424: `sha256:59ee889a01c1f07aca9b2c6f8a7e4640a1f1cb2c325272691fc16a6c958b3d5a`.
+  The package's own SHA256SUMS.txt is self-referential by construction — it verifies the
+  package against itself, not against this record; the inner-zip hash is what does that.
 - Package: `ApexBimStudio-<version>.zip` — the version (and so the artifact name) comes from
   the csproj `<Version>` (currently `0.5.0-rc1`). Zip hashes vary per assembly run; the
   per-file SHA256SUMS.txt inside is the stable integrity source and install.ps1 enforces it

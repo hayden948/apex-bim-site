@@ -1679,3 +1679,97 @@ INSIDE the package as SHA256SUMS.txt and install.ps1 refuses to install on any m
 Verification chain for Hayden: download artifact 9416585424 → RELEASE.txt commit must equal
 `git rev-parse v0.5.0-rc1` (32bcde4) → install.ps1 verifies every file against the embedded
 manifest before copying. Identity = this artifact + this commit; not "any rebuild".
+
+### Cycle 3 (17:12–17:30 UTC) — V2 verdict: REFUTED; identity chain hardened; round close
+
+V2 (charged: find how the artifact Hayden installs could differ from the tagged commit) —
+REFUTED with 5 findings, all confirmed and fixed. Its core: "at least two (soon three)
+artifacts with the same name and a RELEASE.txt reading 32bcde4 exist, and no prescribed step
+compares any hash to the ledger's binding manifest." It verified the links that held (tag→
+commit character-identical in the operator doc; run 34→32bcde4 via API; build inputs at the
+tag byte-identical to what run 34 executed; cross-doc consistency of run/artifact/commit).
+
+Dispositions:
+1. **Wrong-run substitution passed every prescribed check — CONFIRMED, CLOSED** with the
+   reviewer's own one-line fix: operator step 0 now hashes the INNER zip
+   (`Get-FileHash ApexBimStudio-0.5.0-rc1.zip`) against the ledger-recorded value BEFORE
+   trusting anything in the package. Run 34's inner zip:
+   a49474110ca0bef302e147d7ae76993b0e8e3bcb1ada71c0c01bd843fa8ac280 (from its log); run 33's
+   (same commit, wrong run): e071bc4d064efecddb3cd1902d7c8a3c2a05d7c85e5dba369bc7660025124680
+   — recorded precisely so the wrong sibling is mechanically distinguishable. Step 0b now
+   states the tag-triggered run's artifact must NOT be installed (it verifies the trigger
+   only).
+2. **install.ps1 blind to extra files — CONFIRMED, FIXED**: it now refuses any package file
+   not listed in the manifest. Proven under pwsh: planted `net8/Payload.dll` →
+   "REFUSED-EXTRA: net8/Payload.dll (present but NOT in the manifest)"; plus a new harness
+   case proving the CI manifest's `*`-prefixed (binary-mode) rows parse correctly — the
+   DESIGNATED artifact's embedded (older) install.ps1 tolerated them only via PowerShell
+   wildcard globbing, a quirk noted here; the anchor check in step 0 protects that artifact
+   end-to-end regardless, and hardened installers ship from the next build.
+3. **Self-referential trust root — CONFIRMED, CLOSED BY THE ANCHOR**: step 0's inner-zip
+   hash is checked by the OPERATOR against THIS ledger before install.ps1 ever runs, so a
+   fully re-packed zip (forged RELEASE.txt + regenerated manifest + tampered installer)
+   fails the first check. Residual, stated: HTTPS delivery from github.com is the remaining
+   load-bearing assumption.
+4. **"Recorded once" was truncated — CONFIRMED, CORRECTED**: the FULL 21-row binding
+   manifest of the designated artifact (run 34 log, verbatim; the earlier 7-row excerpt and
+   its elided ProtectedData row are superseded by this complete record):
+
+```
+c0e823163ebea7287926bd241232462cd7641114730a8271ee0a002a577c43ea  ApexBimStudio.addin
+9852e757bfa290433acb642fd48a680047ed4a31cffda7bab566dec94d854685  KNOWN_LIMITATIONS.md
+903f7c8f5d344fb7d5c52a53f66b78c8393396f0d072115ca0e07dfc1c00663f  QUICKSTART.md
+1eb7bfe737e122d661449f8c0c791448270606e3ce9f8b9f4b4cfad43f836aa9  README.txt
+5e6068c3d0a65b64319c70eb7f00a18c17bab59928b6724c91b233cb9929b1b9  RELEASE.txt
+d9256f3e97bd9c156f9242d158aae2b112de19656095d9f4854fbe36922ed3ef  install.ps1
+2d1aabb4ed57af0f690ab1333e404bddf880a651e0666a848c9de1f91c2fd383  net48/ApexBimStudio.dll
+aec227154fc549739ff5a07920723641f773ce65d05dca70b215183c93e9641d  net48/BouncyCastle.Cryptography.dll
+80678203bd0203a6594f4e330b22543c0de5059382bb1c9334b7868b8f31b1bc  net48/Microsoft.Bcl.AsyncInterfaces.dll
+accccfbe45d9f08ffeed9916e37b33e98c65be012cfff6e7fa7b67210ce1fefb  net48/System.Buffers.dll
+bf3fb84664f4097f1a8a9bc71a51dcf8cf1a905d4080a4d290da1730866e856f  net48/System.Memory.dll
+1d3ef8698281e7cf7371d1554afef5872b39f96c26da772210a33da041ba1183  net48/System.Numerics.Vectors.dll
+37768488e8ef45729bc7d9a2677633c6450042975bb96516e186da6cb9cd0dcf  net48/System.Runtime.CompilerServices.Unsafe.dll
+37fa9beebb4f6613a635378a7e145f9187e093471ba2aed5cdf9ae14874a5f7b  net48/System.Security.Cryptography.ProtectedData.dll
+e9c4f5eed186cb129c527c4b8d67d163ea2f2396e9d8b96e30b5e7c12203ce84  net48/System.Text.Encodings.Web.dll
+86c3f263ae9b4469ab1266c80471087082447eb4a38e6b97bf5e84de15c07a1d  net48/System.Text.Json.dll
+4f81ffd0dc7204db75afc35ea4291769b07c440592f28894260eea76626a23c6  net48/System.Threading.Tasks.Extensions.dll
+e905d102585b22c6df04f219af5cbdbfa7bc165979e9788b62df6dcc165e10f4  net48/System.ValueTuple.dll
+3cd11fb1eb03814d73b2dd7832d6b881ce0ff4a7bb0a69de2df86ea99334e306  net8/ApexBimStudio.dll
+a96969c7964648c24aba2795587ee448d07b50ca5212e9d8eade021eb0f0cef6  net8/BouncyCastle.Cryptography.dll
+63b4b50b9891a71078e9c70995f45fb4095aa444410829cfe131aeb2a4f07991  uninstall.ps1
+```
+
+   Durability: operator step 0c attaches the anchored zip to a GitHub Release on the tag and
+   re-verifies the hash after upload (artifact retention expires 2026-11-18; GitHub's outer
+   artifact digest sha256:59ee889a… recorded as a tertiary anchor).
+5. **Record nit — CONFIRMED, CORRECTED**: run 34 was created 17:06:06Z (its package step ran
+   ~17:07:29Z; the earlier "dispatch run 34 at 17:07" refers to the latter).
+
+#### ROUND 6 EXIT status
+
+- **EXIT 1 (workflow run from tag, or dispatch fallback + trigger defect diagnosed):** MET
+  via the documented fallback. Root cause of the tag-push failure is DIAGNOSED (branch-scoped
+  session push credentials — not the workflow pattern, not the refspec) and is not fixable
+  from this session; the `v*` trigger's first real firing is operator step 0b with an
+  explicit verify-a-run-starts check.
+- **EXIT 2 (artifact identity proven, hashes recorded once):** MET, with the byte-for-byte
+  local-rebuild criterion replaced by measurement: two same-commit CI runs differ in
+  ApexBimStudio.dll bytes (different runner SDK patches), so identity is anchored to the
+  designated artifact (run 32395720825 / artifact 9416585424 / inner-zip hash a494741…),
+  self-identifying via RELEASE.txt and verified by an operator-performed hash check against
+  this ledger before anything in the package is trusted or executed.
+- **EXIT 3 (operator install script):** DELIVERED (OPERATOR_INSTALL_CHECK.md — anchor check,
+  tag push + trigger verification, Release attachment, install, ribbon, all four license
+  states incl. the newly issued expired-demo license, smoke build with the first in-Revit
+  flex check, clean uninstall; every box PASS/FAIL with capture-on-fail).
+  **The GO-gate installer item remains OPEN and HUMAN-VERIFY-REQUIRED — the script existing
+  closes nothing, per the brief.**
+- Triple verification: V1 (state check caught the tag-position inaccuracy in the audit-round
+  close line, corrected above); V2 REFUTED → 5 findings fixed with pasted negative controls;
+  V3 = the two green CI runs (232 assertions each on windows-latest) + the pwsh harness
+  re-run on the hardened installer (extra-file refusal + asterisk-manifest acceptance pasted).
+
+HANDOFF (Hayden, in order): OPERATOR_INSTALL_CHECK.md steps 0 → 0b → 0c → 1–10 on a non-dev
+machine, send back the boxes + captures. Then the rest of the GO gate: drawings through gate
+#11 → batch kit + sealed holdout; pinned Revit version; one REHEARSAL.md run. ROUND 6 CLOSED
+at T0+~30 min.

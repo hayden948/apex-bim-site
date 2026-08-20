@@ -30,13 +30,23 @@ Write-Host "Apex BIM Studio installer — package: $pkg"
 $sumsPath = Join-Path $pkg "SHA256SUMS.txt"
 if (-not (Test-Path $sumsPath)) { throw "SHA256SUMS.txt missing — this is not a complete package. Re-download it." }
 $bad = @()
+$inManifest = @{}
 foreach ($line in Get-Content $sumsPath) {
     if ($line.Trim() -eq "") { continue }
     $hash, $rel = $line -split '\s+', 2
-    $file = Join-Path $pkg $rel.Trim()
+    $rel = $rel.Trim().TrimStart('*')
+    $inManifest[$rel] = $true
+    $file = Join-Path $pkg $rel
     if (-not (Test-Path $file)) { $bad += "$rel (missing)"; continue }
     $actual = (Get-FileHash -Algorithm SHA256 $file).Hash.ToLowerInvariant()
     if ($actual -ne $hash.ToLowerInvariant()) { $bad += "$rel (contents differ)" }
+}
+# Also refuse files the manifest does NOT list — an added file is as much
+# tampering as a changed one (round-6 adversarial finding 2).
+foreach ($f in Get-ChildItem -Recurse -File $pkg) {
+    $rel = $f.FullName.Substring($pkg.Length + 1) -replace '\\', '/'
+    if ($rel -eq "SHA256SUMS.txt") { continue }
+    if (-not $inManifest.ContainsKey($rel)) { $bad += "$rel (present but NOT in the manifest)" }
 }
 if ($bad.Count -gt 0) {
     throw "The package failed its integrity check — do not install it. Re-download and try again.`nProblems:`n  " + ($bad -join "`n  ")
