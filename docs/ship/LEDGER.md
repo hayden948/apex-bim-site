@@ -1603,3 +1603,26 @@ workflow_dispatch on the tagged commit and report it.
 windows-latest — stamped 0.5.0-rc1 build, 218-assertion suite, dependency-guarded packaging,
 `ApexBimStudio-package` artifact whose name now matches the documented release identity.
 AUDIT ROUND CLOSED; tag v0.5.0-rc1 → accf195 (local; operator pushes).
+
+---
+
+## ROUND 6 — fire the release pipeline for real; bind artifact identity; operator install script
+
+**T0: Thu Aug 20 17:03:48 UTC 2026** (hard stop 19:03:48). Brief: (1) push tag v0.5.0-rc1 for
+real and watch the trigger (never fired for a tag); (2) prove CI artifact identity against the
+tagged commit, record binding hashes ONCE; (3) tight operator install script for a non-dev
+Windows machine (HUMAN-VERIFY-REQUIRED — stays open until Hayden's results land); (4) ingest
+results if they arrive. State check (17:03, pasted): tree clean, HEAD = origin = local tag
+v0.5.0-rc1 = 9043be0. CORRECTION to the audit-round close line: it wrote "tag → accf195";
+the tag was moved once more after the final ledger commit and sits at 9043be0 (verified by
+`git rev-parse` above) — this entry is the correction, history not rewritten.
+
+Cycle-1 plan: before placing the tag for keeps, make the ARTIFACT self-identifying so the
+V2 attack ("the artifact Hayden installs differs from the commit the tag names") is closed
+structurally: make-package.sh writes RELEASE.txt (version + git commit + build UTC) into the
+package and the workflow prints the package's per-file SHA256SUMS into the run log — binding
+hashes then come from CI evidence tied to a named commit, not from anything container-local.
+That is one workflow/script commit; the tag then moves ONE final time onto it (tag never yet
+pushed — nothing published moves) and is pushed. If the remote still 403s tag refs (it did
+twice in round 5), diagnose per the brief, then fall back to workflow_dispatch pinned to the
+tagged commit and record which path produced the artifact.
