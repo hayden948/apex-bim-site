@@ -1773,3 +1773,93 @@ HANDOFF (Hayden, in order): OPERATOR_INSTALL_CHECK.md steps 0 → 0b → 0c → 
 machine, send back the boxes + captures. Then the rest of the GO gate: drawings through gate
 #11 → batch kit + sealed holdout; pinned Revit version; one REHEARSAL.md run. ROUND 6 CLOSED
 at T0+~30 min.
+
+---
+
+## MINI-ROUND — release hardening patch (SDK pin, 5.1 self-test, out-of-band anchor)
+
+**T0: Thu Aug 20 17:27:16 UTC 2026** (45-min budget). Three scoped items; diff confined to
+global.json, the workflow's setup-dotnet step (required for item 1 to govern runners),
+install.ps1, OPERATOR_INSTALL_CHECK.md, and this ledger.
+
+**Item 1 — SDK pinned, and the reproducibility ruling is SUPERSEDED (correction, append-only):**
+The designated artifact's run log says "dotnet-install: Installed version is 8.0.424" — that
+exact version is now pinned in global.json with rollForward "disable", and CI's setup-dotnet
+installs FROM global.json (leaving "8.0.x" would eventually install a newer patch and fail
+the build under the pin). Local refusal demo (runtime-only dotnet, pasted): in-repo,
+resolution engages and refuses — "A compatible .NET SDK was not found." — a line absent from
+the same command outside the repo. THE DEFINITIVE PROOF, from CI: two runs at commit f6c400a
+on different runners (run 37, push, 17:31; run 38, dispatch, 17:32) produced
+
+```
+net48/ApexBimStudio.dll  6ca4cd179fed946ed2a117c0c82a8fd5797fe03ef43ef3e3d390b882e57619ca  (both runs)
+net8/ApexBimStudio.dll   b2a678c47dba013955c611be643c4a11ae995475ba8e778436d818db3c982b47  (both runs)
+all 20 content rows identical; only RELEASE.txt differs (embedded build timestamp, by design)
+```
+
+versus the PRE-pin pair at 32bcde4 (runs 33/34) which differed in DLL bytes. **The round-6
+"byte-for-byte unachievable in principle" ruling is hereby superseded**: it was an artifact of
+the unpinned SDK; byte-for-byte across runners is again a verifiable property for every
+future rc. The designated-artifact doctrine STANDS as the operational rule (the pin restores
+reproducibility underneath it; it does not replace the anchor check). Residual, stated: the
+csproj's floating Revit API package versions (2022.*/2025.*) remain a slow-moving
+reproducibility input — a new upstream package release changes build inputs across longer
+horizons; pin them at the next rc.
+
+**Item 2 — install.ps1 under Windows PowerShell 5.1 semantics:** true 5.1 cannot execute here
+(Linux; pwsh 7.4.6 only) — per the brief, the static audit was done and a self-test ships.
+Audit result: NO parse-time breakers in install.ps1 or uninstall.ps1 (no ternary, no ??, no
+&&/|| chains); Get-FileHash is PSv4+; both scripts carry a UTF-8 BOM (5.1 reads them
+correctly); $ErrorActionPreference=Stop set after param. Added: a shell gate (5.1+/7+
+supported, older shells exit immediately with a plain message) and `-SelfTest` with
+`-PackageDir` — shell version, manifest readability (entry count), Get-FileHash capability,
+%APPDATA% write probe (single temp file, deleted), Addins/ProgramData folder status; NO
+install actions. Proven under pwsh (pasted): pass case "SELF-TEST PASSED", 22 manifest
+entries; fail case names the missing manifest and exits 1 (exit code verified un-piped). The
+12-gate installer harness re-passed on a freshly assembled package. OPERATOR_INSTALL_CHECK
+gains step 0a: run the REPO copy's -SelfTest (the DESIGNATED package's installer predates the
+switch) before anything touches Revit paths.
+
+**Item 3 — out-of-band anchor: RECORDED.** The inner-zip anchor hash + full release identity
+(commit, run, artifact id, expiry) were sent to the operator's Telegram (chat 8806576979,
+message_id 26, 2026-08-20 ~17:38 UTC) with the instruction to copy it into his password
+manager. Step 0 now says to compare against the out-of-band copy, never a hash printed in the
+repo or package. The ledger records WHERE the copy lives, not a substitute for it.
+
+**No-new-rc claim, confirmed explicitly:** nothing in this diff alters the DESIGNATED
+artifact (run 32395720825's package — already built and anchored). global.json affects future
+builds only; the install.ps1 changes ship in FUTURE packages (the packaged rc-installer is
+protected end-to-end by the step-0 anchor check, and step 0a runs the repo copy); doc changes
+travel outside the package. The rc2 decision stays with Hayden and nothing here forces it.
+
+**V2 (one pass over the combined diff) — REFUTED, 6 findings; disposition:**
+1. "Ledger states nothing about the Telegram delivery / no evidence it happened" — TIMING
+   ARTIFACT, now moot: the send HAD happened (tool receipt: "Sent to chat 8806576979
+   (message_id 26)") but the ledger entry recording it was drafted, uncommitted, when the
+   reviewer snapshotted. This commit lands both. Clarification the reviewer earned: the
+   "Telegram alerts DARK" ledger line refers to the API's outbound-alert token (still unset);
+   the anchor went through the separate operator-bot channel, which returned a message id.
+2. ROLLBACK.md still framed its in-repo hash as the operator's pre-execution check —
+   CONFIRMED, FIXED: reworded to "engineering record only, NOT the operator's check source",
+   full hash values elided, out-of-band copy named as the only check source.
+3. -SelfTest could throw raw exceptions under $ErrorActionPreference=Stop (the exact audit
+   item the recorded audit skipped) — CONFIRMED, FIXED: every probe now yields a "FAIL:" line
+   + exit 1 (proven: ProgramData unset → "FAIL: the ProgramData environment variable is not
+   set", exit 1; unreadable-manifest case runs as root here so chmod is ignored — that
+   specific denial path is exercised by structure, not by execution, stated honestly).
+4. Step 0a validated the WRONG machine (dev laptop, not the test VM) — CONFIRMED, FIXED:
+   the step now copies the single install.ps1 to the TEST machine and runs there.
+5. Shell-gate message promised "5.1 or 7+" while admitting 6.x — CONFIRMED, FIXED: message
+   now says "PowerShell 5.1 or newer", matching the gate.
+6. -PackageDir trailing-slash/relative-path mangled the manifest-completeness math —
+   CONFIRMED, FIXED: Resolve-Path + TrimEnd normalization; proven with a trailing-slash
+   SelfTest pass AND a full trailing-slash install ("Package integrity: OK … Installed net8").
+Reviewer confirmations kept for the record: the HARD CONSTRAINT HELD (designated artifact
+untouched — immutable uploaded artifact; diff affects future builds/packages only); all
+5.1 parse-legality questions SURVIVED (if-expression assignment is PS2.0+; zero
+ternary/??/chains repo-wide; BOMs verified by od); 8.0.424 corroborated as the newest 8.0.4xx
+in dotnet's releases.json, consistent with run 34's log line.
+
+**Post-fix V3 (pasted above and here):** 12/12 harness gates; SelfTest pass with trailing
+slash; two distinct FAIL-line contract demonstrations; A/B byte-identity table (runs 37/38).
+MINI-ROUND CLOSED. EXIT met on all three items; corrections recorded append-only.

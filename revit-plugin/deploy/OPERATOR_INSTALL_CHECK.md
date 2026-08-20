@@ -21,10 +21,13 @@ across runs (LEDGER R6 C2); THIS artifact is the release.
   SAME commit produces a different hash, so this one check pins "this artifact, this run",
   which RELEASE.txt alone cannot.) Then check `RELEASE.txt` commit == 32bcde4… .
   FAIL either → STOP; screenshot the hash + RELEASE.txt + the run page.
-- [ ] 0a. **Shell self-test (~30 s, makes no changes):** from your REPO checkout (the packaged
-  installer predates this switch), in a plain PowerShell (the default 5.1 is exactly what
-  this validates):
-  `powershell -ExecutionPolicy Bypass -File revit-plugin\deploy\installer\install.ps1 -SelfTest -PackageDir <extracted package folder>`
+- [ ] 0a. **Shell self-test (~30 s, makes no changes) — ON THE TEST MACHINE, not your dev
+  laptop** (its shell and permissions are what the install will actually use). The packaged
+  installer predates this switch, so copy ONE file from your repo checkout to the test
+  machine — `revit-plugin\deploy\installer\install.ps1` — put it BESIDE the extracted
+  package folder, then in a plain PowerShell there (the default 5.1 is exactly what this
+  validates):
+  `powershell -ExecutionPolicy Bypass -File install.ps1 -SelfTest -PackageDir <extracted package folder>`
   **Expect:** "SELF-TEST PASSED". Any FAIL line → STOP and send the exact output; nothing has
   touched Revit paths yet.
 - [ ] 0b. Push the tag (this closes the never-fired `v*` trigger too):

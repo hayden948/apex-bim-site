@@ -32,15 +32,21 @@ $ErrorActionPreference = "Stop"
 # 5.1 at parse time, before any line runs.)
 $psv = $PSVersionTable.PSVersion
 if ($psv.Major -lt 5 -or ($psv.Major -eq 5 -and $psv.Minor -lt 1)) {
-    Write-Host "This installer needs Windows PowerShell 5.1 or PowerShell 7+. This shell is $psv."
+    Write-Host "This installer needs PowerShell 5.1 or newer. This shell is $psv."
     exit 1
 }
 
 $pkg = if ($PackageDir -ne "") { $PackageDir } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+# Normalize so later relative-path math (manifest completeness check) never
+# breaks on a trailing slash or a relative -PackageDir.
+if (Test-Path $pkg) { $pkg = (Resolve-Path $pkg).Path.TrimEnd('\', '/') }
 
 if ($SelfTest) {
-    # ~30-second machine readiness check. Makes NO changes to Revit or Apex
-    # files (one temp probe file in %APPDATA%, deleted immediately).
+    # ~30-second machine readiness check, run ON THE MACHINE that will install.
+    # Makes NO changes to Revit or Apex files (one temp probe file in
+    # %APPDATA%, deleted immediately). Every probe is wrapped so that under
+    # $ErrorActionPreference=Stop a denied path yields a FAIL line and exit 1,
+    # never a raw exception (the operator contract is "any FAIL line -> STOP").
     Write-Host "Apex installer self-test (no install actions will be taken)"
     Write-Host ("  shell: PowerShell " + $psv + " - supported")
     $sums = Join-Path $pkg "SHA256SUMS.txt"
@@ -48,20 +54,44 @@ if ($SelfTest) {
         Write-Host "  FAIL: SHA256SUMS.txt not found in '$pkg'. Run with -PackageDir <extracted package folder>."
         exit 1
     }
-    $rows = @(Get-Content $sums | Where-Object { $_.Trim() -ne "" })
-    Write-Host ("  manifest: readable, " + $rows.Count + " entries")
-    $probeHash = (Get-FileHash -Algorithm SHA256 $sums).Hash
-    Write-Host ("  hashing: Get-FileHash works (manifest self-hash " + $probeHash.Substring(0, 12) + "...)")
-    $probeFile = Join-Path $env:APPDATA ("apex-selftest-" + [guid]::NewGuid().ToString("N") + ".tmp")
-    Set-Content -Path $probeFile -Value "probe"
-    Remove-Item -Force $probeFile
-    Write-Host ("  write access: OK under " + $env:APPDATA)
-    $addins = Join-Path $env:APPDATA "Autodesk\Revit\Addins\$RevitVersion"
-    if (Test-Path $addins) { Write-Host ("  Revit $RevitVersion addins folder: exists (" + $addins + ")") }
-    else { Write-Host ("  Revit $RevitVersion addins folder: will be created at install (" + $addins + ")") }
-    $licDir = Join-Path $env:ProgramData "Apex"
-    if (Test-Path $licDir) { Write-Host ("  license folder: exists (" + $licDir + ")") }
-    else { Write-Host ("  license folder: will be created at install; if that fails on a shared machine, an admin places the license") }
+    try {
+        $rows = @(Get-Content $sums | Where-Object { $_.Trim() -ne "" })
+        Write-Host ("  manifest: readable, " + $rows.Count + " entries")
+    } catch {
+        Write-Host ("  FAIL: manifest could not be read: " + $_.Exception.Message)
+        exit 1
+    }
+    try {
+        $probeHash = (Get-FileHash -Algorithm SHA256 $sums).Hash
+        Write-Host ("  hashing: Get-FileHash works (manifest self-hash " + $probeHash.Substring(0, 12) + "...)")
+    } catch {
+        Write-Host ("  FAIL: Get-FileHash is not usable in this shell: " + $_.Exception.Message)
+        exit 1
+    }
+    try {
+        $probeFile = Join-Path $env:APPDATA ("apex-selftest-" + [guid]::NewGuid().ToString("N") + ".tmp")
+        Set-Content -Path $probeFile -Value "probe"
+        Remove-Item -Force $probeFile
+        Write-Host ("  write access: OK under " + $env:APPDATA)
+    } catch {
+        Write-Host ("  FAIL: cannot write under " + $env:APPDATA + " : " + $_.Exception.Message)
+        exit 1
+    }
+    try {
+        $addins = Join-Path $env:APPDATA "Autodesk\Revit\Addins\$RevitVersion"
+        if (Test-Path $addins) { Write-Host ("  Revit $RevitVersion addins folder: exists (" + $addins + ")") }
+        else { Write-Host ("  Revit $RevitVersion addins folder: will be created at install (" + $addins + ")") }
+        if ($null -eq $env:ProgramData -or $env:ProgramData -eq "") {
+            Write-Host "  FAIL: the ProgramData environment variable is not set on this machine."
+            exit 1
+        }
+        $licDir = Join-Path $env:ProgramData "Apex"
+        if (Test-Path $licDir) { Write-Host ("  license folder: exists (" + $licDir + ")") }
+        else { Write-Host ("  license folder: will be created at install; if that fails on a shared machine, an admin places the license") }
+    } catch {
+        Write-Host ("  FAIL: folder status check failed: " + $_.Exception.Message)
+        exit 1
+    }
     Write-Host "SELF-TEST PASSED - this shell can run the installer."
     exit 0
 }
