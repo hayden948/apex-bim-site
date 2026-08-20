@@ -192,10 +192,18 @@ internal sealed class SpecReviewWindow : Window
 
             // Units are a real parser-miss class (mm read as in) — editable
             // alongside the value; the geometry unit list is validated on save.
-            var unitsBox = new TextBox { Text = f.Units ?? "", Margin = new Thickness(0, 1, 6, 1) };
-            Grid.SetRow(unitsBox, rowIx);
-            Grid.SetColumn(unitsBox, 2);
-            grid.Children.Add(unitsBox);
+            // Only fields that HAVE a units concept get the box: offering one
+            // on e.g. the equipment-name row could only ever produce an
+            // internal-key error (audit-round finding 10).
+            TextBox? unitsBox = null;
+            if (f.Key.StartsWith("geometry.", StringComparison.Ordinal)
+                || f.Key.EndsWith(".value", StringComparison.Ordinal))
+            {
+                unitsBox = new TextBox { Text = f.Units ?? "", Margin = new Thickness(0, 1, 6, 1) };
+                Grid.SetRow(unitsBox, rowIx);
+                Grid.SetColumn(unitsBox, 2);
+                grid.Children.Add(unitsBox);
+            }
 
             _editors.Add(new Editor
             {

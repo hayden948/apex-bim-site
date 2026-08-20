@@ -69,7 +69,7 @@ reconstructing the run.
 
 - Drawing file: `zz-corrupt.pred.json`
 - Result: **NOT BUILT** — no family file was produced for this drawing.
-- Why: '0x0A' is invalid within a JSON string. The string should be correctly escaped. LineNumber: 2 | BytePositionInLine: 31.
+- Why: the file's contents could not be read as an equipment spec (technical detail for support: '0x0A' is invalid within a JSON string. The string should be correctly escaped. LineNumber: 2 | BytePositionInLine: 31.)
 - What to do: The drawing's spec file could not be read. Re-download or re-export it from the Apex portal; if it fails again, send the run log to support.
 
 ## Transformer T-1 (Depth Miss Demo)

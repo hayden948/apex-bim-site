@@ -403,8 +403,8 @@ public class RunQaCommand : IExternalCommand
             string verdict = qa.Passed
                 ? $"PASSED — score {qa.Score:0.##}."
                 : $"FAILED — score {qa.Score:0.##}: {qa.Summary.Errors} error(s), " +
-                  $"{qa.Summary.Warnings} warning(s). Export is gated (Doc 8 §6).";
-            TaskDialog.Show($"Apex QA (Doc 8) — {qa.FamilyName ?? id}",
+                  $"{qa.Summary.Warnings} warning(s). Export is gated until the errors are fixed.";
+            TaskDialog.Show($"Apex QA — {qa.FamilyName ?? id}",
                 verdict + (lines.Count > 0 ? "\n\n" + string.Join("\n", lines)
                     : "\n\nAll checks passed."));
             return qa.Passed ? Result.Succeeded : Result.Failed;
@@ -484,8 +484,8 @@ public class RunQaCommand : IExternalCommand
 
         string verdict = errors == 0
             ? "PASSED — no blocking errors."
-            : $"FAILED — {errors} blocking error(s). Export would be gated (Doc 8 §6).";
-        TaskDialog.Show("Apex QA (Doc 8) — local checks",
+            : $"FAILED — {errors} blocking error(s). Export would be gated until they are fixed.";
+        TaskDialog.Show("Apex QA — local checks",
             verdict + "\n\n" + string.Join("\n", findings));
         return errors == 0 ? Result.Succeeded : Result.Failed;
     }
@@ -537,7 +537,7 @@ public class VerifyClearancesCommand : IExternalCommand
             {
                 TaskDialog.Show("Apex Clearances",
                     $"No '{ClearanceSubcategory}' zones found in placed families. " +
-                    "Generate families with clearance zones first (Doc 6).");
+                    "Generate families with clearance zones first.");
                 return Result.Cancelled;
             }
 
@@ -547,7 +547,7 @@ public class VerifyClearancesCommand : IExternalCommand
                   + string.Join("\n", clashes.Take(20))
                   + (clashes.Count > 20 ? $"\n… and {clashes.Count - 20} more (see log)." : "");
             foreach (string cl in clashes) ApexLog.Warn("Clearance clash: " + cl);
-            TaskDialog.Show("Apex Clearances (Doc 6)", summary);
+            TaskDialog.Show("Apex — Verify Clearances", summary);
             return Result.Succeeded;
         }
         catch (Exception ex)
@@ -603,7 +603,7 @@ public class ExportLayoutCommand : IExternalCommand
             {
                 string csv = ApexApiClient.RunSync(ct =>
                     Session.Api.ExportPointsAsync(Session.ActiveFamilyId!, "csv", ct));
-                TaskDialog.Show("Apex Layout Export (Doc 7)", csv);
+                TaskDialog.Show("Apex — Layout Export", csv);
                 return Result.Succeeded;
             }
 
@@ -641,7 +641,7 @@ public class ExportLayoutCommand : IExternalCommand
 
         if (stamped.Count == 0)
         {
-            TaskDialog.Show("Apex Layout Export (Doc 7)",
+            TaskDialog.Show("Apex — Layout Export",
                 "No placed Apex families (Apex_AfisId) with point locations found in this project.");
             return Result.Cancelled;
         }
@@ -680,7 +680,7 @@ public class ExportLayoutCommand : IExternalCommand
         }
         System.IO.File.WriteAllText(dlg.FileName, sb.ToString());
         ApexLog.Info($"Exported {stamped.Count} layout point(s) to {dlg.FileName}");
-        TaskDialog.Show("Apex Layout Export (Doc 7)",
+        TaskDialog.Show("Apex — Layout Export",
             $"Exported {stamped.Count} point(s) to:\n{dlg.FileName}");
         return Result.Succeeded;
     }
@@ -762,8 +762,11 @@ public class AboutCommand : IExternalCommand
     {
         string version = typeof(AboutCommand).Assembly.GetName().Version?.ToString(3) ?? "?";
         string revit = c.Application.Application.VersionNumber;
+        // License status here makes the rehearsal preflight's "About shows
+        // licensee + expiry" check real (audit-round finding 3).
+        string license = ApexLicense.CheckDefault().Message;
         TaskDialog.Show("Apex BIM Studio",
-            $"Apex BIM Studio plugin v{version} — running in Revit {revit}. (Doc 4)");
+            $"Apex BIM Studio plugin v{version} — running in Revit {revit}.\n\n{license}");
         return Result.Succeeded;
     }
 }

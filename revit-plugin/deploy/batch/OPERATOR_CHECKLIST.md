@@ -75,3 +75,11 @@ names it, and the fix is yours (clear the attribute / close the program), not a 
    remove it from System Environment Variables if you set it there). While it is set, every
    interactive **Batch Build** click runs headless against THAT folder — no confirmation, no
    dialogs — because the variable is the scripted-mode switch.
+
+## License (required since v0.5.0 — do this during one-time setup)
+
+10. Put the `license.apexlic` issued to you into `C:\ProgramData\Apex\` (the installer does
+    this if you pass `-LicenseFile`). Without a valid license every build command refuses to
+    run — interactively you get a dialog saying so; in SCRIPTED mode the batch exits without
+    dialogs and run-batch.ps1 just reports "the batch did not complete", so if a scripted run
+    produces nothing, check the license FIRST (the Apex log records the license state).

@@ -135,7 +135,10 @@ class TestMain
             var loaded = ApexConfig.Load();
             AssertTrue(loaded.ApiUrl == "https://example.apexbim.test/api", "config round-trips api_url");
             var client = new ApexApiClient(); // no arg -> reads config first
-            AssertTrue(true, "client constructs from config URL");
+            // Assert something real: construction succeeded (a throw would fail
+            // the try) AND the instance exists (audit finding: the previous
+            // AssertTrue(true, ...) could never fail).
+            AssertTrue(client != null, "client constructs from config URL");
         }
         finally
         {
@@ -655,10 +658,23 @@ class TestMain
             Failure = BatchRunReport.FailureClass.Environment,
             Error = "Family template not found (looked for 'default').",
         };
+        var badInputRow = new BatchRunReport.Row
+        {
+            File = "e.pred.json",
+            Failure = BatchRunReport.FailureClass.BadInput,
+            Error = "'0x0A' is invalid within a JSON string. LineNumber: 2.",
+        };
 
         string rep = BatchRunReport.BuildCustomerReport(
-            new[] { okRow, failRow, envRow }, "2026-08-18 20:00:00", "C:\\logs\\run-x.log");
-        AssertTrue(rep.Contains("1 of 3"), "report: headline counts built over ALL drawings");
+            new[] { okRow, failRow, envRow, badInputRow }, "2026-08-18 20:00:00", "C:\\logs\\run-x.log");
+        AssertTrue(rep.Contains("1 of 4"), "report: headline counts built over ALL drawings");
+        // Raw parser text must never LEAD a customer-facing Why line (audit
+        // finding: the guard batch had no BadInput row — the one class that
+        // leaks parser internals was the one class the guard never saw).
+        AssertTrue(rep.Contains("could not be read as an equipment spec")
+            && rep.Contains("technical detail for support: '0x0A'")
+            && !rep.Contains("Why: '0x0A'"),
+            "report: BadInput raw parser text is framed, never the lead");
         AssertTrue(rep.Contains("Square D NQ430 Panelboard") && rep.Contains("Transformer T-9"),
             "report: items titled by equipment name");
         AssertTrue(rep.Contains("out/a.rfa") && rep.Contains("20 in W"),

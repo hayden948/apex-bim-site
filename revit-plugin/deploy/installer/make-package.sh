@@ -36,8 +36,10 @@ for f in System.Security.Cryptography.ProtectedData.dll System.Text.Json.dll Sys
 done
 cp "$HERE/install.ps1" "$HERE/uninstall.ps1" "$PKG/"
 cp "$HERE/../ApexBimStudio.addin" "$PKG/"
-cp "$HERE/README.txt" "$PKG/" 2>/dev/null || true
-cp "$HERE/../QUICKSTART.md" "$HERE/../KNOWN_LIMITATIONS.md" "$PKG/" 2>/dev/null || true
+# Docs are part of the deliverable — hard-gated like the DLL dependencies
+# (audit finding: '|| true' let a path typo silently drop them).
+cp "$HERE/README.txt" "$PKG/"
+cp "$HERE/../QUICKSTART.md" "$HERE/../KNOWN_LIMITATIONS.md" "$PKG/"
 ( cd "$PKG" && find . -type f ! -name SHA256SUMS.txt -print0 | sort -z \
   | xargs -0 sha256sum | sed 's|\./||' > SHA256SUMS.txt )
 ( cd "$OUT" && rm -f "ApexBimStudio-$VER.zip" \

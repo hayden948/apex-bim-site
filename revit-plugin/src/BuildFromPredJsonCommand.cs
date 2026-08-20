@@ -215,7 +215,9 @@ public class BuildFromPredJsonCommand : IExternalCommand
                 .AppendLine("Family built.")
                 .AppendLine()
                 .AppendLine($"Output: {outcome.OutputPath}")
-                .AppendLine($"Size (in): {Fmt(pred.Geometry.Width)} W × {Fmt(pred.Geometry.Depth)} D × {Fmt(pred.Geometry.Height)} H")
+                // Unit-aware (audit finding: "Size (in):" mislabeled metric
+                // specs by 25.4× while the build itself converted correctly).
+                .AppendLine($"Size: {BatchBuildCommand.SizeOf(pred.Geometry) ?? "?"}")
                 .AppendLine($"Parameters added: {outcome.ParamsAdded} of {outcome.ParamsTotal} (values set on {outcome.ParamsValued})")
                 .AppendLine($"Geometry checks: width resize {YN(outcome.Flex.Width)}, depth resize {YN(outcome.Flex.Depth)}, " +
                     $"height resize {YN(outcome.Flex.Height)}, centered {YN(outcome.Flex.Centered)}")

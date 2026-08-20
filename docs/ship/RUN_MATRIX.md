@@ -14,7 +14,7 @@ here** (Linux container, no Revit — LEDGER Round 1). Therefore:
   customer drawings there is nothing to hold out. No holdout was simulated. The holdout
   procedure the operator must follow is in `OPERATOR_CHECKLIST.md` steps 4 and 8.
 
-## Executed here — every attempt listed (deployed api version noted per row: rows 3 ran under v27, rows 4/6 under v28, rows 8–10 under v29; rows 1/2/7/11 are version-independent local/suite runs except row 7 which ran live under v28)
+## Executed here — every attempt listed. Deployed api version per row: row 3 under v27, rows 4/6/7 under v28, rows 8–10 under v29; rows 1/2/11 are local suite runs (version-independent)
 
 | # | stage under test | input | result | evidence (LEDGER R3 / R2) |
 |---|---|---|---|---|

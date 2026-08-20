@@ -404,7 +404,7 @@ public class BatchBuildCommand : IExternalCommand
         return row;
     }
 
-    private static string? SizeOf(PredGeometry? g)
+    internal static string? SizeOf(PredGeometry? g)
     {
         if (g?.Width == null || g.Depth == null || g.Height == null) return null;
         string Dim(PredDim d) =>

@@ -283,7 +283,16 @@ public static class BatchRunReport
     }
 
     private static string Plain(Row r)
-        => string.IsNullOrWhiteSpace(r.Error) ? "no further detail was captured" : r.Error!;
+    {
+        if (string.IsNullOrWhiteSpace(r.Error)) return "no further detail was captured";
+        // BadInput errors are raw parser text ("'0x0A' is invalid within a
+        // JSON string…") — frame them for the modeler instead of leading with
+        // internals (audit-round finding 6).
+        return r.Failure == FailureClass.BadInput
+            ? "the file's contents could not be read as an equipment spec " +
+              $"(technical detail for support: {r.Error})"
+            : r.Error!;
+    }
 
     private static string NextStep(FailureClass f) => f switch
     {
