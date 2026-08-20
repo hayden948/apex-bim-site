@@ -1530,3 +1530,71 @@ ROUND 5 CLOSED. Final state: branch f131814 pushed; local tag v0.5.0-rc1 (operat
 all EXIT items delivered or explicitly dispositioned (installer outside-verification =
 NAMED BLOCKER per the brief's clause; rehearsal's Revit half = stated shortfall; holdout
 number = honestly NOT YET MEASURED). Go/no-go stands: **DELAY, with the 5-item GO gate.**
+
+---
+
+## AUDIT ROUND (Thu Aug 20, 15:31–15:55 UTC) — "run it again to check for mistakes"
+
+Full-surface audit of rounds 1–5: fresh deterministic compiles + 217-assertion suite green +
+register checker green + live health 200 as the baseline, then an independent adversarial
+auditor over the entire settled surface (register vs code, cross-doc consistency,
+customer-facing paths, tests, workflow vs operator flow). Verdict: **REFUTED — 10 findings**,
+all real, all fixed in commits dc3118f + 0314874. The auditor also verified the CI story
+(runs 27–31 match the ledger exactly, checked via the GitHub API), the DELAY verdict's
+consistency, and the licensing/validator/installer coherence.
+
+**CORRECTION LINES (append-only fixes to earlier entries):**
+- R5 C3/C5/C6 named three different commits as the release ("314db99", "83efe13", "a9a604b")
+  and C6's "full hashes in ROLLBACK.md" pointer went stale when the audit replaced the
+  hashes. RULE, from now on: **the tag v0.5.0-rc1 is the single source of truth for the
+  release commit** (currently 0314874); ledger entries are history, not pointers. Binding
+  hashes are recorded once by the operator from the CI package artifact of the tagged commit.
+- R5 close-out's "Final state: branch f131814 pushed" was already stale when written-after
+  commits landed (94f5102, dc3118f); superseded by the tag rule above.
+- dc3118f's commit message said "local build scripts now pass /deterministic" while the
+  scripts lived only in the container — now committed as `revit-plugin/tools/dev-build/`
+  (APEX_TOOLCHAIN_ROOT-parameterized), closing the unreproducible-recipe gap.
+- SHIP_READINESS rows 15/16 "Round that fixes it" claimed rounds 2/5 would close them;
+  neither round did — cells now say so (the 30 MB upload gate is still live).
+- RUN_MATRIX row 13's "no-jargon guard" claim was broader than the test (no BadInput row in
+  the guard batch) — guard extended, claim now backed.
+
+**Findings fixed (evidence: suite paste below, sample regenerated, harness re-run):**
+1. Release-identity self-contradiction → tag rule + committed recipe (above).
+2. `Size (in):` hardcoded in the Build Family dialog — metric specs (zgsl: 2340 mm) were
+   mislabeled by 25.4× on screen while the build converted correctly → unit-aware formatter
+   shared with the batch path.
+3. REHEARSAL preflight step "About shows licensee + expiry" checked a dialog that did not
+   exist → About now shows the license status message.
+4. Internal "(Doc 4/6/7/8)" codenames in always-visible dialogs (QA, Clearances, Layout
+   Export, About) → stripped.
+5. Register row 8 still said "vendor URL placeholder" after R5 C6 fixed it → corrected.
+6. Raw System.Text.Json parser text led the customer report's Why line for BadInput (visible
+   in the committed sample) and the jargon-guard test never saw a BadInput row → framed as
+   "the file's contents could not be read … (technical detail for support: …)", guard
+   extended, sample regenerated.
+7. OPERATOR_CHECKLIST had no license step — following it exactly produced a silently blocked
+   scripted batch → step 10 added with the diagnosis order.
+8. `AssertTrue(true, "client constructs …")` could never fail → real assertion.
+9. CI package would be named `ApexBimStudio-0.5.0.zip` while every doc says `-rc1` → csproj
+   Version is now `0.5.0-rc1` (numeric assembly version unchanged at 0.5.0.0); package docs
+   hard-gated in make-package.sh (the `|| true` could silently drop QUICKSTART/LIMITATIONS).
+10. The review grid offered a units box on the equipment-name row whose only possible output
+    was an internal-key error → units box only on fields that have units.
+
+**Post-fix V3 (pasted):**
+```
+net48 csc exit: 0 (dll present: yes)   net8 csc exit: 0 (dll present: yes)
+ALL TESTS PASSED   (218 assertions, fresh /deterministic compiles)
+REGISTER CHECK PASSED: 16 evidenced rows, T0 present, no banned words, coverage terms present.
+installer harness (pwsh 7.4.6, final package): 7/7 checks OK / ALL INSTALLER CHECKS PASSED
+audit-container reference hashes: net48 9d8f5526…, net8 a9c0bb2c… (full in ROLLBACK.md)
+GET /v1/health -> 200 ok:true (api v29 unchanged)
+DB baseline intact: 7 uploads / 5 families / 1 queued job / 4 license config keys
+```
+
+Residuals the audit confirmed as correctly-labeled (not mistakes): all HUMAN-VERIFY items,
+the named installer blocker, the DELAY verdict and 5-item GO gate, the unmeasured holdout
+number. One auditor caveat worth repeating: no TAG push has ever exercised the workflow's
+tag trigger — the operator's tag push is its first live test; if no run fires, use
+workflow_dispatch on the tagged commit and report it.
