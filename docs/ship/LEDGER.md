@@ -1598,3 +1598,8 @@ the named installer blocker, the DELAY verdict and 5-item GO gate, the unmeasure
 number. One auditor caveat worth repeating: no TAG push has ever exercised the workflow's
 tag trigger — the operator's tag push is its first live test; if no run fires, use
 workflow_dispatch on the tagged commit and report it.
+
+**Audit-round CI confirmation:** run 32 (commit 0314874) = completed, success on
+windows-latest — stamped 0.5.0-rc1 build, 218-assertion suite, dependency-guarded packaging,
+`ApexBimStudio-package` artifact whose name now matches the documented release identity.
+AUDIT ROUND CLOSED; tag v0.5.0-rc1 → accf195 (local; operator pushes).
