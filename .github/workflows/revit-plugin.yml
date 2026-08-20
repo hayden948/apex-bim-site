@@ -32,12 +32,18 @@ jobs:
       # is missing from either build folder.
       - name: Assemble install package
         shell: bash
+        env:
+          GIT_SHA: ${{ github.sha }}
         run: |
           VER=$(grep -oP '(?<=<Version>)[^<]+' revit-plugin/src/ApexBimStudio.csproj)
           bash revit-plugin/deploy/installer/make-package.sh "$VER" \
             revit-plugin/src/bin/Release/net48 \
             revit-plugin/src/bin/Release/net8.0-windows \
             package-out
+          echo "=== RELEASE IDENTITY (commit ${GIT_SHA}) ==="
+          cat "package-out/ApexBimStudio-$VER/RELEASE.txt"
+          echo "=== PER-FILE SHA256SUMS (the binding hashes) ==="
+          cat "package-out/ApexBimStudio-$VER/SHA256SUMS.txt"
       - name: Upload install package
         uses: actions/upload-artifact@v4
         with:

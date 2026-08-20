@@ -36,6 +36,15 @@ for f in System.Security.Cryptography.ProtectedData.dll System.Text.Json.dll Sys
 done
 cp "$HERE/install.ps1" "$HERE/uninstall.ps1" "$PKG/"
 cp "$HERE/../ApexBimStudio.addin" "$PKG/"
+# Self-identifying artifact (round 6): the package names the exact commit it
+# was built from, so a downloaded zip can always be matched to its tag —
+# closing the stale-artifact / wrong-run / retagged-head attack. GIT_SHA is
+# passed by CI; local builds may pass it too or get "(not recorded)".
+{
+  echo "Apex BIM Studio $VER"
+  echo "commit: ${GIT_SHA:-(not recorded)}"
+  echo "built_utc: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+} > "$PKG/RELEASE.txt"
 # Docs are part of the deliverable — hard-gated like the DLL dependencies
 # (audit finding: '|| true' let a path typo silently drop them).
 cp "$HERE/README.txt" "$PKG/"
