@@ -1505,3 +1505,28 @@ GitHub Release → record hashes in ROLLBACK.md; (2) run WALKTHROUGH.md on clean
 kit → sealed holdout; (4) CVE pinned Revit version in writing; (5) run REHEARSAL.md once;
 (6) TELEGRAM_BOT_TOKEN if phone alerts wanted. Standing items: Sprint 001 fixtures, briefing
 docs into VCS, shop2revit archive, Authenticode cert (post-trial).
+
+### Round-5 close-out (Thu Aug 20, 15:16–15:25 UTC — second ~18 h suspension noted between
+Wed 21:31 and this entry; wall-clock rule applied, state re-established from this ledger)
+
+The canonical packaging path was proven BY FAILING FIRST — exactly what the guard exists for:
+
+- CI run 30 (commit d258866, first execution of the CI packaging step): **failure** —
+  make-package.sh refused to package: "FATAL: net8/System.Security.Cryptography.
+  ProtectedData.dll missing — incomplete build output; not packaging." Diagnosis: on
+  net8.0-windows, ProtectedData ships in the Microsoft.WindowsDesktop.App shared framework
+  that Revit 2025 hosts — the SDK rightly does not copy it; the guard was over-strict for
+  net8 (it remains REQUIRED from the package on net48, and run 30 proved that check passes).
+- Fix: guard requires ProtectedData net48-only, with the reasoning in the script itself
+  (commit f131814). Also fixed en route: the on.push tags-without-branches gotcha that had
+  silently stopped branch CI (run for a9a604b never fired; d258866 restored triggers and
+  the workflow file is now in its own paths filter).
+- CI run 31 (f131814): **success** — dotnet build (stamped, both targets) → 217-assertion
+  suite → make-package.sh with guards → ApexBimStudio-package zip artifact uploaded. The
+  documented operator flow (tag → CI package artifact → GitHub Release → hashes into
+  ROLLBACK.md) now has a green end-to-end execution behind it.
+
+ROUND 5 CLOSED. Final state: branch f131814 pushed; local tag v0.5.0-rc1 (operator pushes);
+all EXIT items delivered or explicitly dispositioned (installer outside-verification =
+NAMED BLOCKER per the brief's clause; rehearsal's Revit half = stated shortfall; holdout
+number = honestly NOT YET MEASURED). Go/no-go stands: **DELAY, with the 5-item GO gate.**
