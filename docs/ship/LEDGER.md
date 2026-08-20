@@ -1626,3 +1626,56 @@ That is one workflow/script commit; the tag then moves ONE final time onto it (t
 pushed — nothing published moves) and is pushed. If the remote still 403s tag refs (it did
 twice in round 5), diagnose per the brief, then fall back to workflow_dispatch pinned to the
 tagged commit and record which path produced the artifact.
+
+### Cycle 2 (17:04–17:20 UTC) — tag diagnosis complete; pipeline fired; identity bound
+
+**Item 1 — tag trigger.** Tree clean at 32bcde4; tag placed there (one move, pre-publication)
+and pushed with an explicit refspec (`refs/tags/v0.5.0-rc1:refs/tags/v0.5.0-rc1`). REJECTED at
+transport ("remote end hung up"; ls-remote shows zero remote tags — third rejection across two
+rounds). Diagnosis, complete per the brief: (a) workflow tag pattern `v*` is correct but
+unexercisable until a tag ref exists remotely; (b) tag is local-only, proven by ls-remote;
+(c) refspec explicit — not a refspec problem; (d) the GitHub MCP toolset has NO tag/ref
+creation tool (branches and files only; releases read-only). ROOT CAUSE: this session's push
+credentials are scoped to the designated branch ref. Remote tag creation is strictly an
+operator capability. **Fallback used and recorded: `workflow_dispatch` via the API, pinned to
+the branch ref whose head IS the tagged commit** (32bcde4). The `v*` push trigger itself
+remains unexercised until Hayden pushes the tag — carried on the GO gate with a
+verify-a-run-starts step.
+
+**Item 2 — artifact identity.** TWO runs built the tagged commit (push run 33 at 17:05,
+dispatch run 34 at 17:07 — the push of the identity commit itself provided a free second run).
+Both green: build → 232-assertion suite (ALL TESTS PASSED in both logs) → guarded packaging →
+artifact. RELEASE.txt in BOTH runs: `commit: 32bcde4efe52efd922e4f08df5e0a660f2c557b0` — the
+artifact self-identifies as the tagged commit. Cross-run comparison of the two logged
+SHA256SUMS manifests:
+
+- IDENTICAL (19 of 21 files): the .addin, all four docs/scripts, ALL nine net48 dependency
+  DLLs, net8 BouncyCastle. (RELEASE.txt differs by its built_utc timestamp, by design.)
+- **DIFFERENT: net48/ApexBimStudio.dll and net8/ApexBimStudio.dll** — the two runs ran on
+  different runner images (visible in the logs: git 2.55.0.windows.4 vs .3), so the floating
+  `8.0.x` SDK patch differed; Roslyn determinism holds only for identical compiler+inputs.
+  EMPIRICAL CONCLUSION, replacing the earlier assumption: **byte-reproducibility across
+  builds is NOT a property of this pipeline and is no longer claimed anywhere.** The brief's
+  "hashes match a fresh local rebuild byte-for-byte" is unachievable in principle across
+  toolchains — the mismatch stop-condition fired, was diagnosed to its root cause, and the
+  identity rule below replaces it.
+
+**BINDING IDENTITY, recorded once (per the audit-round rule):** the release artifact is
+**run 34's `ApexBimStudio-package` (artifact ID 9416585424, run 32395720825)** — the
+deliberately-triggered dispatch on the tagged commit. Its logged manifest is the binding:
+
+```
+2d1aabb4ed57af0f690ab1333e404bddf880a651e0666a848c9de1f91c2fd383  net48/ApexBimStudio.dll
+3cd11fb1eb03814d73b2dd7832d6b881ce0ff4a7bb0a69de2df86ea99334e306  net8/ApexBimStudio.dll
+aec227154fc549739ff5a07920723641f773ce65d05dca70b215183c93e9641d  net48/BouncyCastle.Cryptography.dll
+a96969c7964648c24aba2795587ee448d07b50ca5212e9d8eade021eb0f0cef6  net8/BouncyCastle.Cryptography.dll
+37fa9beebb4f6613a635378a7e145f9187e093471ba2aed5cdf9ae14874a5f7b  net48/...ProtectedData.dll
+d9256f3e97bd9c156f9242d158aae2b112de19656095d9f4854fbe36922ed3ef  install.ps1
+63b4b50b9891a71078e9c70995f45fb4095aa444410829cfe131aeb2a4f07991  uninstall.ps1
+(full 21-row manifest: run 34 log, step "Assemble install package"; the same manifest ships
+INSIDE the package as SHA256SUMS.txt and install.ps1 refuses to install on any mismatch)
+```
+
+Verification chain for Hayden: download artifact 9416585424 → RELEASE.txt commit must equal
+`git rev-parse v0.5.0-rc1` (32bcde4) → install.ps1 verifies every file against the embedded
+manifest before copying. Identity = this artifact + this commit; not "any rebuild".
