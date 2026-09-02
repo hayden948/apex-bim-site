@@ -1,0 +1,188 @@
+{
+  "afis": {
+    "afis_version": "1.0.0",
+    "connectors": [],
+    "geometry": {
+      "bbox": {
+        "max": [
+          1.17,
+          1.0125,
+          1.99
+        ],
+        "min": [
+          -1.17,
+          -1.0125,
+          0
+        ]
+      },
+      "constraints": [
+        {
+          "refs": [
+            "rp-left",
+            "rp-center-x",
+            "rp-right"
+          ],
+          "type": "equality"
+        },
+        {
+          "refs": [
+            "rp-front",
+            "rp-center-y",
+            "rp-back"
+          ],
+          "type": "equality"
+        }
+      ],
+      "dimensions": [
+        {
+          "id": "dim-width",
+          "label_param": "Width",
+          "references": [
+            "rp-left",
+            "rp-right"
+          ],
+          "value": 2.34
+        },
+        {
+          "id": "dim-depth",
+          "label_param": "Depth",
+          "references": [
+            "rp-front",
+            "rp-back"
+          ],
+          "value": 2.025
+        }
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "reference_planes": [
+        {
+          "axis": "x",
+          "id": "rp-center-x",
+          "is_origin": true,
+          "name": "Center X",
+          "offset": 0
+        },
+        {
+          "axis": "y",
+          "id": "rp-center-y",
+          "is_origin": true,
+          "name": "Center Y",
+          "offset": 0
+        },
+        {
+          "axis": "x",
+          "id": "rp-left",
+          "name": "Left",
+          "offset": -1.17
+        },
+        {
+          "axis": "x",
+          "id": "rp-right",
+          "name": "Right",
+          "offset": 1.17
+        },
+        {
+          "axis": "y",
+          "id": "rp-front",
+          "name": "Front",
+          "offset": -1.0125
+        },
+        {
+          "axis": "y",
+          "id": "rp-back",
+          "name": "Back",
+          "offset": 1.0125
+        }
+      ],
+      "solids": [
+        {
+          "depth_param": "Height",
+          "id": "s1",
+          "method": "extrusion"
+        }
+      ]
+    },
+    "id": "<FAMILY_ID>",
+    "identity": {
+      "category": "Electrical Equipment",
+      "family_template": "Electrical Equipment.rft",
+      "name": "ZGSL-H-1500-34.5-0.48 Pad-Mount Transformer"
+    },
+    "parameters": [
+      {
+        "binding": "type",
+        "data_type": "Text",
+        "group": "PG_IDENTITY_DATA",
+        "name": "Apex_AfisId",
+        "value": "<FAMILY_ID>"
+      },
+      {
+        "binding": "type",
+        "data_type": "Number",
+        "group": "PG_ELECTRICAL",
+        "name": "Rated Power",
+        "unit": "kVA",
+        "value": "1500"
+      },
+      {
+        "binding": "type",
+        "data_type": "Number",
+        "group": "PG_ELECTRICAL",
+        "name": "Primary Voltage",
+        "unit": "V",
+        "value": "34500"
+      },
+      {
+        "binding": "type",
+        "data_type": "Number",
+        "group": "PG_ELECTRICAL",
+        "name": "Secondary Voltage",
+        "unit": "V",
+        "value": "480"
+      },
+      {
+        "binding": "type",
+        "data_type": "Number",
+        "group": "PG_IDENTITY_DATA",
+        "name": "Total Weight",
+        "unit": "kg",
+        "value": "6260"
+      },
+      {
+        "binding": "type",
+        "data_type": "Text",
+        "group": "PG_IDENTITY_DATA",
+        "name": "Manufacturer Series",
+        "value": "ZGSL-H"
+      }
+    ],
+    "points": [
+      {
+        "description": "Placement centerline",
+        "id": "p-center",
+        "local": [
+          0,
+          0,
+          0
+        ],
+        "point_code": "CL",
+        "type": "layout"
+      }
+    ],
+    "tier": "type",
+    "zones": [
+      {
+        "depth": 0.9144,
+        "face": "front",
+        "id": "nec-workspace",
+        "is_blocking": true,
+        "type": "service_access"
+      }
+    ]
+  },
+  "qa_score_expected": 0.94
+}

@@ -1,4 +1,71 @@
-# APEX BIM Studio — Marketing Homepage
+# APEX BIM Studio
+
+This repo now holds three components:
+
+| Directory | Component |
+|---|---|
+| `/` (root) | Marketing site (static HTML/CSS, described below) + `app.html` pipeline console |
+| `revit-plugin/` | The ApexBimStudio Revit add-in — source, tests, CI. See `revit-plugin/README.md`. |
+| `supabase/` | Apex API v1 (edge function + migrations), deployed to the `apex-bim-studio` Supabase project. See `supabase/README.md`. |
+| `tests/console/` | Browser tests for the pipeline console (mock API + Playwright, run in CI). |
+
+## The full loop (submittal → placed Revit family)
+
+1. **Sign up / sign in** on `app.html` (the pipeline console) and create a
+   project — you become its admin. Add teammates by email via the members API.
+2. **Upload** an equipment submittal PDF and run **AI extraction** (Claude reads
+   the drawing; needs the `ANTHROPIC_API_KEY` secret on the Supabase project).
+   Review the extracted dimensions/parameters with per-field confidence.
+3. **Approve** — the extraction becomes an AFIS 1.0 document in the family
+   library (metric, NEC 110.26 clearance zone auto-added for electrical gear).
+4. **Validate** (Doc 8 QA engine) and **Queue RFA** — QA-gated: no certificate,
+   no export.
+5. In Revit: **Mint plugin token** in the console (copies to clipboard) →
+   **Apex BIM Studio → Settings → Save token from clipboard** → **Generate →
+   Process Queue**. The plugin builds the family from AFIS, places/saves it,
+   and uploads the built `.rfa` back to the library, where anyone on the
+   project can download it.
+
+## Running autonomously (no human in the loop)
+
+The whole pipeline can run itself; three switches make it hands-off:
+
+1. **Auto-build per project** — tick **Auto-build** next to the project picker
+   (or `PATCH /v1/projects/{id} {"auto_pipeline": true}`). From then on an
+   upload extracts immediately, and when every extracted parameter's
+   confidence clears the project bar (`auto_min_confidence`, default 0.9) the
+   API approves it, runs QA, and queues the RFA job on its own — audited as
+   `api:auto`. Low-confidence extractions stop and wait in **Pending reviews**;
+   nothing is auto-approved blind.
+2. **Auto Process in the plugin** — **Generate → Auto Process** toggles a
+   background worker: any Revit session left open (an empty project is fine)
+   drains the RFA queue every 5 minutes via Revit's Idling event, logging to
+   `%LOCALAPPDATA%\Apex\logs` instead of showing dialogs. Point a dedicated
+   workstation or VM at it and family building becomes a service. (The
+   heavier-scale alternative — Autodesk APS Design Automation for Revit,
+   cloud headless builds billed per job — plugs into the same `jobs` queue
+   when needed.)
+3. **Ops run from GitHub** — merging to `main` auto-deploys both edge functions
+   and migrations (`.github/workflows/deploy-api.yml`; needs the
+   `SUPABASE_ACCESS_TOKEN` + `SUPABASE_DB_PASSWORD` repo secrets), and a
+   30-minute scheduled health check (`health.yml`) probes `/v1/health` and the
+   live API and emails the repo owner on failure.
+4. **Telegram is the human-in-the-loop surface** — when the autonomous pipeline
+   needs a decision (low-confidence extraction, QA block, failed build) it
+   messages the operator's Telegram chat, and the review happens from the
+   phone: `/pending`, `/approve <id>` (approve + QA + queue RFA in one tap),
+   `/reject <id>`, `/status`. Needs the `TELEGRAM_BOT_TOKEN` secret on the
+   Supabase project for outbound alerts; commands work without it. See
+   `supabase/README.md`.
+
+Net effect: drop a submittal PDF on an auto-build project and, with one Revit
+worker session open anywhere, a finished parametric `.rfa` appears in the
+library with zero clicks — extraction, review gate, QA, build, and upload all
+happen in your own infrastructure.
+
+---
+
+## Marketing site
 
 Production-ready static implementation of the **Revizto-style** APEX BIM Studio homepage
 (implemented from the Claude Design handoff bundle).
@@ -8,6 +75,7 @@ Production-ready static implementation of the **Revizto-style** APEX BIM Studio 
 | File                 | Purpose                                                                 |
 | -------------------- | ----------------------------------------------------------------------- |
 | `index.html`         | Homepage + the interactive product simulation (vanilla JS).             |
+| `app.html`           | **Pipeline console** — drives the hosted Apex API end-to-end: sign in (or sign up) with an Apex account, pick/create a project, upload a submittal PDF → AI extraction review → approve into the library → QA validate → queue RFA → download the built family. An `apx_` service token also works (see `supabase/README.md`). |
 | `product.html`       | AI Revit Family Generator — problem, 5-step workflow, feature rows, ROI, use cases. |
 | `survey.html`        | Survey & Field Layout — nested points, layout workflow, field-format strip, KPIs. |
 | `integrations.html`  | Integrations grid (Revit, ACC, BIM 360, Trimble, Navisworks, Procore, Bluebeam, ReCap, Leica/Topcon, API) grouped by category, Live / Coming-soon status. |

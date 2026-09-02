@@ -1,0 +1,75 @@
+{
+  "schema_version": "1.0",
+  "family_name": "Panelboard 208V 42ckt",
+  "family_template": "Electrical Equipment.rft",
+  "category": "Electrical Equipment",
+  "geometry": {
+    "primitive": "box",
+    "width": {
+      "value": 20,
+      "unit": "in"
+    },
+    "depth": {
+      "value": 5.75,
+      "unit": "in"
+    },
+    "height": {
+      "value": 26,
+      "unit": "in"
+    }
+  },
+  "parameters": [
+    {
+      "name": "Apex_Width",
+      "spec_type": "Length",
+      "group": "Dimensions",
+      "is_instance": false,
+      "value": 20,
+      "units": "in"
+    },
+    {
+      "name": "Apex_Depth",
+      "spec_type": "Length",
+      "group": "Dimensions",
+      "is_instance": false,
+      "value": 5.75,
+      "units": "in"
+    },
+    {
+      "name": "Apex_Height",
+      "spec_type": "Length",
+      "group": "Dimensions",
+      "is_instance": false,
+      "value": 26,
+      "units": "in"
+    },
+    {
+      "name": "Voltage",
+      "spec_type": "Number",
+      "group": "Electrical",
+      "is_instance": false,
+      "value": 208
+    },
+    {
+      "name": "Number of Circuits",
+      "spec_type": "Integer",
+      "group": "Electrical",
+      "is_instance": false,
+      "value": 42
+    },
+    {
+      "name": "Manufacturer",
+      "spec_type": "Text",
+      "group": "Identity Data",
+      "is_instance": false,
+      "value": "Example Electric Co"
+    },
+    {
+      "name": "Apex_AfisId",
+      "spec_type": "Text",
+      "group": "Identity Data",
+      "is_instance": false,
+      "value": "example-panelboard-001"
+    }
+  ]
+}

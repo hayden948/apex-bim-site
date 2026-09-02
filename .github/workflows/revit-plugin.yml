@@ -1,0 +1,63 @@
+name: Build Revit plugin
+
+on:
+  push:
+    # branches AND tags must both be listed: specifying tags alone silently
+    # stops branch pushes from triggering (this bit us on a9a604b — no run).
+    # Path filters are ignored for tag pushes, so tags always build.
+    branches: ["**"]
+    tags: ["v*"]
+    paths: ["revit-plugin/**", ".github/workflows/revit-plugin.yml"]
+  pull_request:
+    paths: ["revit-plugin/**"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          # Pinned via global.json (rollForward: disable) so every runner
+          # builds with the exact SDK the designated artifact used — restores
+          # cross-runner byte-reproducibility (mini-round item 1). "8.0.x"
+          # here would install whatever patch is current and then FAIL the
+          # build under the pin once the runner's patch moves past 8.0.424.
+          global-json-file: ./global.json
+      - name: Build (net48 + net8.0-windows)
+        run: dotnet build revit-plugin/src/ApexBimStudio.csproj -c Release
+      - name: Run logic tests
+        run: dotnet run -c Release --project revit-plugin/tests/ApexBimStudio.Tests.csproj
+      # The customer package is assembled HERE, from the version-stamped
+      # dotnet build output with every runtime dependency beside the DLL —
+      # never from a dev machine (round-5 adversarial finding: artifact-only
+      # DLL uploads made the documented package procedure produce a broken
+      # install). make-package.sh also hard-fails if a required dependency
+      # is missing from either build folder.
+      - name: Assemble install package
+        shell: bash
+        env:
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          VER=$(grep -oP '(?<=<Version>)[^<]+' revit-plugin/src/ApexBimStudio.csproj)
+          bash revit-plugin/deploy/installer/make-package.sh "$VER" \
+            revit-plugin/src/bin/Release/net48 \
+            revit-plugin/src/bin/Release/net8.0-windows \
+            package-out
+          echo "=== RELEASE IDENTITY (commit ${GIT_SHA}) ==="
+          cat "package-out/ApexBimStudio-$VER/RELEASE.txt"
+          echo "=== PER-FILE SHA256SUMS (the binding hashes) ==="
+          cat "package-out/ApexBimStudio-$VER/SHA256SUMS.txt"
+      - name: Upload install package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ApexBimStudio-package
+          path: package-out/*.zip
+      - name: Upload bare build folders
+        uses: actions/upload-artifact@v4
+        with:
+          name: ApexBimStudio
+          path: |
+            revit-plugin/src/bin/Release/net48/
+            revit-plugin/src/bin/Release/net8.0-windows/

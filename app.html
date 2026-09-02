@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>APEX BIM Studio — Pipeline Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="apex-rv.css" />
+<link rel="stylesheet" href="apex-pages.css" />
+<style>
+  .console { max-width: 980px; margin: 0 auto; padding: 24px 20px 80px; }
+  .con-card { border: 1px solid #e3e6ea; border-radius: 12px; padding: 22px 24px; margin-bottom: 22px; background: #fff; }
+  .con-card h2 { font-family: "Space Grotesk", sans-serif; font-size: 1.1rem; margin: 0 0 6px; }
+  .con-card .hint { color: #5c6570; font-size: .88rem; margin: 0 0 14px; }
+  .con-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .con-row input[type=text], .con-row input[type=password] {
+    flex: 1; min-width: 220px; padding: 9px 12px; border: 1px solid #cfd5db; border-radius: 8px;
+    font-family: "IBM Plex Mono", monospace; font-size: .85rem;
+  }
+  .con-btn { padding: 9px 16px; border-radius: 8px; border: 1px solid #b91c1c; background: #b91c1c;
+    color: #fff; font-weight: 600; font-size: .9rem; cursor: pointer; }
+  .con-btn.ghost { background: #fff; color: #b91c1c; }
+  .con-btn:disabled { opacity: .45; cursor: default; }
+  .con-out { font-family: "IBM Plex Mono", monospace; font-size: .8rem; background: #f6f7f9;
+    border: 1px solid #e3e6ea; border-radius: 8px; padding: 12px 14px; margin-top: 12px;
+    white-space: pre-wrap; word-break: break-word; max-height: 340px; overflow: auto; display: none; }
+  .con-out.show { display: block; }
+  .con-out.err { background: #fdf2f2; border-color: #f2c4c4; color: #8a1f1f; }
+  .con-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: .86rem; }
+  .con-table th, .con-table td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #eceef1; }
+  .con-table th { color: #5c6570; font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 99px; font-size: .74rem; font-weight: 600; }
+  .pill.ok { background: #e7f6ec; color: #17743a; }
+  .pill.warn { background: #fdf6e3; color: #92610a; }
+  .pill.bad { background: #fdecec; color: #a12626; }
+  .step-num { display: inline-flex; width: 24px; height: 24px; border-radius: 50%; background: #b91c1c;
+    color: #fff; font-size: .8rem; font-weight: 700; align-items: center; justify-content: center; margin-right: 8px; }
+  .conf { font-family: "IBM Plex Mono", monospace; font-size: .78rem; }
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="wrap nav">
+    <a class="brand" href="index.html"><span class="mark"></span>APEX <span class="bim">BIM</span> STUDIO</a>
+    <nav class="nav-links">
+      <a class="nl" href="product.html">Product</a>
+      <a class="nl" href="survey.html">Survey &amp; Layout</a>
+      <a class="nl" href="integrations.html">Integrations</a>
+      <a class="nl" href="pricing.html">Pricing</a>
+      <a class="nl" href="about.html">About</a>
+    </nav>
+    <div class="nav-cta">
+      <a class="btn btn-primary" href="demo.html">Book a demo</a>
+    </div>
+  </div>
+</header>
+
+<section class="page-hero">
+  <div class="wrap">
+    <div class="crumb"><a href="index.html">Home</a> <span class="sep">/</span> Pipeline Console</div>
+    <span class="eyebrow">Live</span>
+    <h1>Submittal → Family pipeline console</h1>
+    <p class="lead">Drive the hosted Apex API end-to-end: upload a submittal PDF, run AI extraction, review &amp; approve into the family library, QA-validate, queue RFA generation for the Revit worker, and download the built family.</p>
+  </div>
+</section>
+
+<div class="console">
+
+  <div class="con-card">
+    <h2>Connection</h2>
+    <p class="hint">Sign in with your Apex account — or paste an <code>apx_…</code> service token / the project publishable key. Credentials stay in this browser (localStorage).</p>
+    <div class="con-row">
+      <input type="text" id="email" placeholder="email" autocomplete="username" />
+      <input type="password" id="password" placeholder="password" autocomplete="current-password" />
+      <button class="con-btn" id="btnSignin">Sign in</button>
+      <button class="con-btn ghost" id="btnSignup">Sign up</button>
+    </div>
+    <div class="con-row" style="margin-top:10px">
+      <input type="text" id="apiUrl" placeholder="API base URL" />
+      <input type="password" id="apiToken" placeholder="apx_… token or user session token" />
+      <button class="con-btn" id="btnConnect">Connect</button>
+      <button class="con-btn ghost" id="btnMint" title="Create an apx_ service token for the Revit plugin (APEX_API_TOKEN)">Mint plugin token</button>
+    </div>
+    <div class="con-out" id="outConnect"></div>
+  </div>
+
+  <div class="con-card">
+    <h2><span class="step-num">1</span>Upload a submittal PDF</h2>
+    <p class="hint">Max 30&nbsp;MB. The file lands in private storage; nothing is public.</p>
+    <div class="con-row">
+      <select id="projSel" style="padding:9px 12px; border:1px solid #cfd5db; border-radius:8px;">
+        <option value="">(default project)</option>
+      </select>
+      <button class="con-btn ghost" id="btnNewProj" disabled>New project</button>
+      <label class="hint" style="display:inline-flex;align-items:center;gap:6px" title="Uploads in this project extract, approve (when every parameter's confidence clears the project's bar), pass QA, and queue the RFA build automatically">
+        <input type="checkbox" id="autoPipe" disabled> Auto-build</label>
+      <input type="file" id="pdfFile" accept="application/pdf" />
+      <button class="con-btn" id="btnUpload" disabled>Upload</button>
+    </div>
+    <div class="con-out" id="outUpload"></div>
+  </div>
+
+  <div class="con-card">
+    <h2><span class="step-num">2</span>Run AI extraction</h2>
+    <p class="hint">Claude reads the PDF and returns family name, category, box geometry, and engineering parameters with per-field confidence. Requires the <code>ANTHROPIC_API_KEY</code> secret on the API.</p>
+    <div class="con-row">
+      <button class="con-btn" id="btnExtract" disabled>Extract</button>
+      <span id="extractStatus" class="hint" style="margin:0"></span>
+    </div>
+    <div id="pendingList"></div>
+    <div id="extractReview"></div>
+    <div class="con-out" id="outExtract"></div>
+  </div>
+
+  <div class="con-card">
+    <h2><span class="step-num">3</span>Approve → library</h2>
+    <p class="hint">Converts the reviewed extraction into an AFIS 1.0 document (metric, NEC 110.26 clearance zone auto-added for electrical gear) and files it in the family library.</p>
+    <div class="con-row">
+      <button class="con-btn" id="btnApprove" disabled>Approve extraction</button>
+    </div>
+    <div class="con-out" id="outApprove"></div>
+  </div>
+
+  <div class="con-card">
+    <h2><span class="step-num">4</span>Family library</h2>
+    <p class="hint">Validate runs the Doc 8 QA engine; Queue RFA is QA-gated (no certificate, no export) and is picked up by the <em>Process Queue</em> button in the Revit plugin; Download serves the built .rfa once the worker delivers it.</p>
+    <div class="con-row">
+      <button class="con-btn ghost" id="btnRefresh" disabled>Refresh library</button>
+    </div>
+    <div id="famList"></div>
+    <div class="con-out" id="outFam"></div>
+  </div>
+
+</div>
+
+<footer class="site-footer" style="text-align:center; padding:28px 0; color:#7a828c; font-size:.85rem;">
+  Apex pipeline console — talks directly to the hosted Apex API v1.
+</footer>
+
+<script>
+(() => {
+  const DEFAULT_URL = "https://kdqisuzydkgzkzxlctpv.supabase.co/functions/v1/api";
+  // Publishable key: safe to embed (it's the public client key); used only as the
+  // apikey for the Supabase auth endpoints when signing in/up.
+  const PUBLISHABLE_KEY = "sb_publishable_n8xDG4wFR656MR419Vlgrg_6lMibnml";
+  const $ = (id) => document.getElementById(id);
+  const state = { uploadId: null, extractionId: null, extraction: null };
+
+  const els = {
+    url: $("apiUrl"), token: $("apiToken"),
+    email: $("email"), password: $("password"),
+    signin: $("btnSignin"), signup: $("btnSignup"),
+    connect: $("btnConnect"), outConnect: $("outConnect"),
+    projSel: $("projSel"), newProj: $("btnNewProj"), autoPipe: $("autoPipe"),
+    file: $("pdfFile"), upload: $("btnUpload"), outUpload: $("outUpload"),
+    extract: $("btnExtract"), extractStatus: $("extractStatus"),
+    review: $("extractReview"), outExtract: $("outExtract"),
+    approve: $("btnApprove"), outApprove: $("outApprove"),
+    refresh: $("btnRefresh"), famList: $("famList"), outFam: $("outFam"),
+  };
+
+  // The auth server lives on the same Supabase host as the API function.
+  function authBase() {
+    return els.url.value.replace(/\/functions\/v1\/.*$/, "") + "/auth/v1";
+  }
+
+  els.url.value = localStorage.getItem("apex.apiUrl") || DEFAULT_URL;
+  els.token.value = localStorage.getItem("apex.apiToken") || "";
+
+  function show(out, msg, isErr) {
+    out.textContent = typeof msg === "string" ? msg : JSON.stringify(msg, null, 2);
+    out.classList.add("show");
+    out.classList.toggle("err", !!isErr);
+  }
+
+  async function api(path, opts = {}) {
+    const resp = await fetch(els.url.value.replace(/\/+$/, "") + path, {
+      ...opts,
+      headers: {
+        "Authorization": "Bearer " + els.token.value.trim(),
+        ...(opts.body ? { "Content-Type": "application/json" } : {}),
+        ...(opts.headers || {}),
+      },
+    });
+    const ctype = resp.headers.get("Content-Type") || "";
+    const payload = ctype.includes("json") ? await resp.json()
+      : ctype.includes("octet-stream") ? await resp.blob()
+      : await resp.text();
+    if (!resp.ok) {
+      const err = payload && payload.error ? payload.error : { code: resp.status, message: String(payload).slice(0, 300) };
+      // User sessions expire after about an hour; say so instead of a bare 401.
+      const tok = els.token.value.trim();
+      const hint = resp.status === 401 && tok && !tok.startsWith("apx_") && !tok.startsWith("sb_")
+        ? " — your session likely expired; sign in again above."
+        : "";
+      throw Object.assign(new Error(`${err.code}: ${err.message}${hint}`), { status: resp.status, api: err });
+    }
+    return payload;
+  }
+
+  function setConnected(on) {
+    [els.upload, els.refresh, els.newProj].forEach((b) => (b.disabled = !on));
+  }
+
+  async function authPost(path, body) {
+    const resp = await fetch(authBase() + path, {
+      method: "POST",
+      headers: { "apikey": PUBLISHABLE_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      throw new Error(data.msg || data.error_description || data.message || ("auth error " + resp.status));
+    }
+    return data;
+  }
+
+  els.signin.addEventListener("click", async () => {
+    try {
+      const s = await authPost("/token?grant_type=password", {
+        email: els.email.value.trim(), password: els.password.value,
+      });
+      els.token.value = s.access_token;
+      show(els.outConnect, `Signed in as ${els.email.value.trim()} (session lasts about an hour).`);
+      els.connect.click();
+    } catch (e) {
+      show(els.outConnect, "Sign-in failed: " + e.message, true);
+    }
+  });
+
+  els.signup.addEventListener("click", async () => {
+    try {
+      const s = await authPost("/signup", {
+        email: els.email.value.trim(), password: els.password.value,
+      });
+      if (s.access_token) {
+        els.token.value = s.access_token;
+        show(els.outConnect, "Account created and signed in.");
+        els.connect.click();
+      } else {
+        show(els.outConnect, "Account created — confirm your email, then sign in.");
+      }
+    } catch (e) {
+      show(els.outConnect, "Sign-up failed: " + e.message, true);
+    }
+  });
+
+  async function loadProjects() {
+    try {
+      const data = await api("/v1/projects");
+      state.projects = data.projects;
+      const cur = els.projSel.value;
+      els.projSel.innerHTML = '<option value="">(default project)</option>' +
+        data.projects.map((p) => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+      if ([...els.projSel.options].some((o) => o.value === cur)) els.projSel.value = cur;
+      syncAutoPipe();
+    } catch {
+      // Project listing is a convenience; the console still works without it.
+    }
+  }
+
+  function syncAutoPipe() {
+    const proj = (state.projects || []).find((p) => p.id === els.projSel.value);
+    els.autoPipe.disabled = !proj;
+    els.autoPipe.checked = !!proj?.auto_pipeline;
+  }
+  els.projSel.addEventListener("change", syncAutoPipe);
+  els.autoPipe.addEventListener("change", async () => {
+    const projId = els.projSel.value;
+    if (!projId) return;
+    try {
+      const p = await api(`/v1/projects/${projId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ auto_pipeline: els.autoPipe.checked }),
+      });
+      const cached = (state.projects || []).find((x) => x.id === p.id);
+      if (cached) cached.auto_pipeline = p.auto_pipeline;
+      show(els.outUpload, p.auto_pipeline
+        ? `Auto-build ON for '${p.name}': uploads extract, approve at ≥${Math.round((p.auto_min_confidence ?? 0.9) * 100)}% confidence, pass QA, and queue the RFA build with no clicks.`
+        : `Auto-build OFF for '${p.name}': extractions wait for review.`);
+    } catch (e) {
+      els.autoPipe.checked = !els.autoPipe.checked;
+      show(els.outUpload, e.message + (e.status === 403 ? " — only project admins can change this." : ""), true);
+    }
+  });
+
+  $("btnMint").addEventListener("click", async () => {
+    const name = prompt("Token name (e.g. the workstation it's for):", "revit-workstation");
+    if (!name) return;
+    try {
+      const t = await api("/v1/tokens", {
+        method: "POST",
+        body: JSON.stringify({ name, ...(els.projSel.value ? { project_id: els.projSel.value } : {}) }),
+      });
+      let copied = false;
+      try {
+        await navigator.clipboard.writeText(t.token);
+        copied = true;
+      } catch { /* clipboard may be blocked; the token is still shown below */ }
+      show(els.outConnect,
+        `Service token '${t.name}' minted (scoped to project ${t.project_id}).\n\n` +
+        `${t.token}\n\n` +
+        (copied ? "Copied to clipboard — in Revit: Apex BIM Studio → Settings → Save token from clipboard.\n"
+                : "Copy it now — it is shown only once.\n") +
+        `Or set APEX_API_TOKEN=${t.token}`);
+    } catch (e) {
+      show(els.outConnect,
+        e.message + (e.status === 403 ? " — sign in with a user account first." : ""), true);
+    }
+  });
+
+  els.newProj.addEventListener("click", async () => {
+    const name = prompt("Project name:");
+    if (!name) return;
+    try {
+      const p = await api("/v1/projects", { method: "POST", body: JSON.stringify({ name }) });
+      show(els.outUpload, `Created project '${p.name}' (${p.id}); you are its admin.`);
+      await loadProjects();
+      els.projSel.value = p.id;
+      syncAutoPipe();
+    } catch (e) {
+      show(els.outUpload, e.message + (e.status === 403 ? " — sign in with a user account to create projects." : ""), true);
+    }
+  });
+
+  els.connect.addEventListener("click", async () => {
+    localStorage.setItem("apex.apiUrl", els.url.value);
+    localStorage.setItem("apex.apiToken", els.token.value);
+    try {
+      const data = await api("/v1/families");
+      show(els.outConnect, `Connected — library has ${data.families.length} famil${data.families.length === 1 ? "y" : "ies"}.`);
+      setConnected(true);
+      renderFamilies(data.families);
+      loadProjects();
+      loadPending();
+    } catch (e) {
+      show(els.outConnect, e.message, true);
+      setConnected(false);
+    }
+  });
+
+  els.upload.addEventListener("click", async () => {
+    const f = els.file.files[0];
+    if (!f) return show(els.outUpload, "Choose a PDF first.", true);
+    try {
+      const buf = new Uint8Array(await f.arrayBuffer());
+      let bin = "";
+      for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+      const row = await api("/v1/uploads", {
+        method: "POST",
+        body: JSON.stringify({
+          filename: f.name,
+          content_base64: btoa(bin),
+          ...(els.projSel.value ? { project_id: els.projSel.value } : {}),
+        }),
+      });
+      state.uploadId = row.id;
+      els.extract.disabled = false;
+      show(els.outUpload, `Uploaded ${row.filename} (${row.size_bytes.toLocaleString()} bytes) — upload id ${row.id}`
+        + (row.auto_extraction_id ? " — auto-build started" : ""));
+      if (row.auto_extraction_id) {
+        // Auto-build project: extraction already started server-side.
+        try {
+          await pollExtraction(row.auto_extraction_id);
+        } catch (e) {
+          els.extractStatus.textContent = "";
+          show(els.outExtract, extractionErrorText(e), true);
+        }
+      }
+    } catch (e) {
+      show(els.outUpload, e.message, true);
+    }
+  });
+
+  // The API answers 202 immediately and extracts in the background; poll the
+  // row until it lands in ready/failed/approved. The row survives a closed
+  // tab — it reappears under "Pending reviews".
+  async function pollExtraction(id) {
+    state.extractionId = id;
+    const started = Date.now();
+    let e = { status: "processing" };
+    while (e.status === "processing") {
+      if (Date.now() - started > 240000)
+        throw new Error("Extraction is taking longer than 4 minutes — leave this page open or come back and use Resume review once it finishes.");
+      els.extractStatus.textContent =
+        `Running — Claude is reading the document… ${Math.round((Date.now() - started) / 1000)}s`;
+      await new Promise((r) => setTimeout(r, 2500));
+      e = await api(`/v1/extractions/${id}`);
+    }
+    els.extractStatus.textContent = "";
+    if (e.status === "approved") {
+      // The autonomous pipeline got there first: approved + QA'd + job queued.
+      show(els.outExtract, {
+        id, status: e.status, auto_pipeline: true,
+        ...(e.cost_usd != null ? { cost_usd: e.cost_usd } : {}),
+        note: "Auto-build approved this extraction, ran QA, and queued the RFA build — nothing to review.",
+        result: e.claude_result,
+      });
+      return;
+    }
+    if (e.status !== "ready") throw new Error(e.error_message || `Extraction ${e.status}`);
+    state.extraction = e.claude_result;
+    renderReview(state.extraction);
+    els.approve.disabled = false;
+    show(els.outExtract, {
+      id,
+      status: e.status,
+      ...(e.cost_usd != null ? { cost_usd: e.cost_usd } : {}),
+      ...(e.duration_ms != null ? { duration_ms: e.duration_ms } : {}),
+      result: state.extraction,
+    });
+  }
+
+  function extractionErrorText(e) {
+    return e.status === 503
+      ? e.message + "\n\nThe API owner needs to run: supabase secrets set ANTHROPIC_API_KEY=sk-ant-…"
+      : e.status === 429
+        ? e.message + "\n\nEach extraction is a paid AI call, so they are capped per hour."
+        : e.message;
+  }
+
+  els.extract.addEventListener("click", async () => {
+    els.extract.disabled = true;
+    els.extractStatus.textContent = "Running — Claude is reading the document…";
+    try {
+      const res = await api("/v1/extractions", {
+        method: "POST",
+        body: JSON.stringify({ upload_id: state.uploadId }),
+      });
+      await pollExtraction(res.id);
+    } catch (e) {
+      els.extractStatus.textContent = "";
+      show(els.outExtract, extractionErrorText(e), true);
+    } finally {
+      els.extract.disabled = false;
+    }
+  });
+
+  async function loadPending() {
+    const box = $("pendingList");
+    try {
+      const data = await api("/v1/extractions?status=ready");
+      if (!data.extractions.length) { box.innerHTML = ""; return; }
+      box.innerHTML = `<p class="hint" style="margin-top:12px">Pending reviews:</p>` +
+        data.extractions.map((e) => `
+          <div class="con-row" style="margin-bottom:6px">
+            <span style="flex:1">${esc(e.family_name || "(unnamed)")} — ${esc(e.filename || "?")}
+              <span class="conf">${e.id.slice(0, 8)}…</span></span>
+            <button class="con-btn ghost" data-resume="${e.id}">Resume review</button>
+          </div>`).join("");
+    } catch {
+      box.innerHTML = ""; // listing is a convenience; extraction itself still works
+    }
+  }
+
+  $("pendingList").addEventListener("click", async (ev) => {
+    const btn = ev.target.closest("button[data-resume]");
+    if (!btn) return;
+    try {
+      const e = await api(`/v1/extractions/${btn.dataset.resume}`);
+      state.extractionId = e.id;
+      state.extraction = e.claude_result;
+      renderReview(e.claude_result);
+      els.approve.disabled = false;
+      show(els.outExtract, { id: e.id, status: e.status, resumed: true });
+    } catch (err) {
+      show(els.outExtract, err.message, true);
+    }
+  });
+
+  const UNITS = ["in", "mm", "cm", "m", "ft"];
+  function renderReview(r) {
+    if (!r) { els.review.innerHTML = ""; return; }
+    const unitSel = (k, cur) => `<select data-dim-unit="${k}">` +
+      UNITS.map((u) => `<option${u === cur ? " selected" : ""}>${u}</option>`).join("") + "</select>";
+    const dims = ["width", "depth", "height"].map((k) =>
+      `<label style="margin-right:14px">${k}
+        <input data-dim="${k}" type="number" step="any" value="${r.geometry[k].value}"
+          style="width:80px;padding:4px 6px;border:1px solid #cfd5db;border-radius:6px">
+        ${unitSel(k, r.geometry[k].unit)}</label>`).join("");
+    const rows = (r.parameters || []).map((p, i) => `
+      <tr><td>${esc(p.name)}</td>
+      <td><input data-param="${i}" value="${esc(p.value)}"
+        style="width:110px;padding:4px 6px;border:1px solid #cfd5db;border-radius:6px">${p.units ? " " + esc(p.units) : ""}</td>
+      <td>${esc(p.spec_type)}</td><td>${esc(p.group)}</td>
+      <td class="conf">${p.confidence != null ? Math.round(p.confidence * 100) + "%" : "—"}</td></tr>`).join("");
+    const warns = (r.warnings || []).map((w) => `<li>${esc(w)}</li>`).join("");
+    els.review.innerHTML = `
+      <p style="margin:14px 0 4px">
+        <input id="rvName" value="${esc(r.family_name)}"
+          style="font-weight:700;min-width:320px;padding:5px 8px;border:1px solid #cfd5db;border-radius:6px">
+        <span class="pill ok">${esc(r.category)}</span></p>
+      <p class="hint">Correct anything the AI misread — your edits are what gets approved:</p>
+      <p class="hint">${dims}</p>
+      <table class="con-table"><thead><tr>
+        <th>Parameter</th><th>Value</th><th>Type</th><th>Group</th><th>Conf.</th>
+      </tr></thead><tbody>${rows}</tbody></table>
+      ${warns ? `<p class="hint" style="margin-top:12px">Warnings:</p><ul class="hint">${warns}</ul>` : ""}`;
+  }
+
+  /** The reviewed (possibly corrected) result assembled from the editable fields. */
+  function collectReview() {
+    const r = JSON.parse(JSON.stringify(state.extraction));
+    const name = $("rvName");
+    if (name && name.value.trim()) r.family_name = name.value.trim();
+    for (const k of ["width", "depth", "height"]) {
+      const v = els.review.querySelector(`[data-dim="${k}"]`);
+      const u = els.review.querySelector(`[data-dim-unit="${k}"]`);
+      if (v && !isNaN(parseFloat(v.value))) r.geometry[k].value = parseFloat(v.value);
+      if (u) r.geometry[k].unit = u.value;
+    }
+    els.review.querySelectorAll("[data-param]").forEach((inp) => {
+      const p = r.parameters[parseInt(inp.dataset.param, 10)];
+      if (p) p.value = inp.value;
+    });
+    return r;
+  }
+
+  els.approve.addEventListener("click", async () => {
+    try {
+      const res = await api(`/v1/extractions/${state.extractionId}/approve`, {
+        method: "POST",
+        body: JSON.stringify({ result: collectReview() }),
+      });
+      show(els.outApprove, `Filed '${res.family.family_name}' in the library — family id ${res.family.id}`);
+      els.approve.disabled = true;
+      els.refresh.click();
+    } catch (e) {
+      show(els.outApprove, e.message, true);
+    }
+  });
+
+  els.refresh.addEventListener("click", async () => {
+    try {
+      const data = await api("/v1/families");
+      renderFamilies(data.families);
+      els.outFam.classList.remove("show");
+    } catch (e) {
+      show(els.outFam, e.message, true);
+    }
+  });
+
+  function renderFamilies(fams) {
+    if (!fams.length) { els.famList.innerHTML = `<p class="hint">Library is empty.</p>`; return; }
+    els.famList.innerHTML = `
+      <table class="con-table"><thead><tr>
+        <th>Family</th><th>Category</th><th>Status</th><th style="width:330px">Actions</th>
+      </tr></thead><tbody>${fams.map((f) => `
+        <tr><td><strong>${esc(f.family_name)}</strong><br><span class="conf">${f.id}</span></td>
+        <td>${esc(f.category || "—")}</td>
+        <td><span class="pill ${f.status === "ready" ? "ok" : "warn"}">${esc(f.status || "?")}</span></td>
+        <td>
+          <button class="con-btn ghost" data-act="validate" data-id="${f.id}">Validate</button>
+          <button class="con-btn ghost" data-act="queue" data-id="${f.id}">Queue RFA</button>
+          <button class="con-btn ghost" data-act="download" data-id="${f.id}" data-name="${esc(f.family_name)}">Download .rfa</button>
+        </td></tr>`).join("")}</tbody></table>`;
+  }
+
+  els.famList.addEventListener("click", async (ev) => {
+    const btn = ev.target.closest("button[data-act]");
+    if (!btn) return;
+    const id = btn.dataset.id;
+    try {
+      if (btn.dataset.act === "validate") {
+        const r = await api(`/v1/families/${id}/validate`, { method: "POST", body: "{}" });
+        const failed = r.findings.filter((x) => !x.passed);
+        show(els.outFam,
+          `${r.family_name}: ${r.passed ? "PASSED" : "FAILED"} — score ${r.score}` +
+          ` (${r.summary.errors} errors, ${r.summary.warnings} warnings)` +
+          (failed.length ? "\n\n" + failed.map((x) => `${x.rule} [${x.severity}] ${x.message}${x.fix_hint ? "\n      fix: " + x.fix_hint : ""}`).join("\n") : ""),
+          !r.passed);
+      } else if (btn.dataset.act === "queue") {
+        const r = await api(`/v1/families/${id}/generate-rfa`, { method: "POST", body: "{}" });
+        show(els.outFam, `Job ${r.job_id} queued. ${r.note}`);
+      } else if (btn.dataset.act === "download") {
+        const blob = await api(`/v1/families/${id}/rfa`);
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = (btn.dataset.name || "family").replace(/[^\w.\-]/g, "_") + ".rfa";
+        a.click();
+        URL.revokeObjectURL(a.href);
+        show(els.outFam, `Downloaded ${a.download} (${blob.size.toLocaleString()} bytes).`);
+      }
+    } catch (e) {
+      show(els.outFam, e.message, true);
+    }
+  });
+
+  function esc(s) {
+    return String(s ?? "").replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  if (els.token.value) els.connect.click();
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,141 @@
+{
+  "afis": {
+    "afis_version": "1.0.0",
+    "connectors": [],
+    "geometry": {
+      "bbox": {
+        "max": [
+          0.6095999999999999,
+          0.381,
+          1.524
+        ],
+        "min": [
+          -0.6095999999999999,
+          -0.381,
+          0
+        ]
+      },
+      "constraints": [
+        {
+          "refs": [
+            "rp-left",
+            "rp-center-x",
+            "rp-right"
+          ],
+          "type": "equality"
+        },
+        {
+          "refs": [
+            "rp-front",
+            "rp-center-y",
+            "rp-back"
+          ],
+          "type": "equality"
+        }
+      ],
+      "dimensions": [
+        {
+          "id": "dim-width",
+          "label_param": "Width",
+          "references": [
+            "rp-left",
+            "rp-right"
+          ],
+          "value": 1.2191999999999998
+        },
+        {
+          "id": "dim-depth",
+          "label_param": "Depth",
+          "references": [
+            "rp-front",
+            "rp-back"
+          ],
+          "value": 0.762
+        }
+      ],
+      "origin": [
+        0,
+        0,
+        0
+      ],
+      "reference_planes": [
+        {
+          "axis": "x",
+          "id": "rp-center-x",
+          "is_origin": true,
+          "name": "Center X",
+          "offset": 0
+        },
+        {
+          "axis": "y",
+          "id": "rp-center-y",
+          "is_origin": true,
+          "name": "Center Y",
+          "offset": 0
+        },
+        {
+          "axis": "x",
+          "id": "rp-left",
+          "name": "Left",
+          "offset": -0.6095999999999999
+        },
+        {
+          "axis": "x",
+          "id": "rp-right",
+          "name": "Right",
+          "offset": 0.6095999999999999
+        },
+        {
+          "axis": "y",
+          "id": "rp-front",
+          "name": "Front",
+          "offset": -0.381
+        },
+        {
+          "axis": "y",
+          "id": "rp-back",
+          "name": "Back",
+          "offset": 0.381
+        }
+      ],
+      "solids": [
+        {
+          "depth_param": "Height",
+          "id": "s1",
+          "method": "extrusion"
+        }
+      ]
+    },
+    "id": "<FAMILY_ID>",
+    "identity": {
+      "category": "Mechanical Equipment",
+      "family_template": "Electrical Equipment.rft",
+      "name": "Hidden AHU-9"
+    },
+    "parameters": [
+      {
+        "binding": "type",
+        "data_type": "Text",
+        "group": "PG_IDENTITY_DATA",
+        "name": "Apex_AfisId",
+        "value": "<FAMILY_ID>"
+      }
+    ],
+    "points": [
+      {
+        "description": "Placement centerline",
+        "id": "p-center",
+        "local": [
+          0,
+          0,
+          0
+        ],
+        "point_code": "CL",
+        "type": "layout"
+      }
+    ],
+    "tier": "type",
+    "zones": []
+  },
+  "qa_score_expected": 1.0
+}

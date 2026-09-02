@@ -1,0 +1,44 @@
+# Scheduled health check: exercises the live API every 30 minutes with the
+# demo-scoped publishable key (already public in app.html's page source, so no
+# secret is needed). A failing run emails the repository owner via GitHub's
+# workflow-failure notifications — no Claude session, no extra infrastructure.
+name: API health check
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - name: GET /v1/health must answer ok
+        run: |
+          BASE="https://kdqisuzydkgzkzxlctpv.supabase.co/functions/v1/api"
+          body=$(mktemp)
+          code=$(curl -sS -o "$body" -w "%{http_code}" --max-time 30 "$BASE/v1/health")
+          echo "HTTP $code"
+          cat "$body"
+          [ "$code" = "200" ] || { echo "::error::/v1/health returned HTTP $code"; exit 1; }
+          grep -q '"ok": true' "$body" || { echo "::error::/v1/health did not report ok"; exit 1; }
+
+      - name: GET /v1/families must answer 200 with a families array
+        run: |
+          BASE="https://kdqisuzydkgzkzxlctpv.supabase.co/functions/v1/api"
+          KEY="sb_publishable_n8xDG4wFR656MR419Vlgrg_6lMibnml"
+          body=$(mktemp)
+          code=$(curl -sS -o "$body" -w "%{http_code}" --max-time 30 \
+            -H "Authorization: Bearer $KEY" "$BASE/v1/families?limit=1")
+          echo "HTTP $code"
+          cat "$body"
+          [ "$code" = "200" ] || { echo "::error::API returned HTTP $code"; exit 1; }
+          grep -q '"families"' "$body" || { echo "::error::Response missing families array"; exit 1; }
+
+      - name: Auth must still reject bad tokens
+        run: |
+          BASE="https://kdqisuzydkgzkzxlctpv.supabase.co/functions/v1/api"
+          code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 30 \
+            -H "Authorization: Bearer apx_bogus_health_check" "$BASE/v1/families")
+          echo "HTTP $code"
+          [ "$code" = "401" ] || { echo "::error::Expected 401 for a bogus token, got $code"; exit 1; }

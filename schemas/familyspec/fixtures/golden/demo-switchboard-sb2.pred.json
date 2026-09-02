@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "family_name": "Demo Switchboard SB-2",
+  "category": "Electrical Equipment",
+  "geometry": {
+    "primitive": "box",
+    "width": {
+      "value": 36,
+      "unit": "in"
+    },
+    "depth": {
+      "value": 20,
+      "unit": "in"
+    },
+    "height": {
+      "value": 90,
+      "unit": "in"
+    }
+  },
+  "parameters": []
+}

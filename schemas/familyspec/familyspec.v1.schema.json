@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://apexbim.studio/schemas/familyspec/v1",
+  "title": "FamilySpec v1",
+  "description": "Canonical interchange contract for a family extracted from a shop drawing / submittal (.pred.json). Schema of record — the C# DTOs (BuildFromPredJsonCommand.cs) and the API EXTRACTION_SCHEMA (supabase/functions/api/index.ts) are contract-tested against this file. Every change is breaking: bump the major version, new file, readers reject unknown versions. See DECISION.md.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "description": "Required on all v1 documents. Absent = legacy v0 (accepted with a visible warning, see DECISION.md); any other value = reject."
+    },
+    "family_name": { "type": "string", "minLength": 1 },
+    "category": { "type": "string", "minLength": 1 },
+    "family_template": {
+      "type": "string",
+      "description": "Optional .rft file name or absolute path; resolver falls back to 'Electrical Equipment.rft'."
+    },
+    "geometry": {
+      "type": "object",
+      "properties": {
+        "primitive": { "const": "box" },
+        "width": { "$ref": "#/definitions/dimension" },
+        "depth": { "$ref": "#/definitions/dimension" },
+        "height": { "$ref": "#/definitions/dimension" }
+      },
+      "required": ["primitive", "width", "depth", "height"],
+      "additionalProperties": false
+    },
+    "parameters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "spec_type": { "enum": ["Text", "Length", "Integer", "Number"] },
+          "group": { "enum": ["Dimensions", "Electrical", "Electrical - Loads", "Constraints", "Identity Data"] },
+          "is_instance": { "type": "boolean" },
+          "value": {
+            "type": ["string", "number", "boolean"],
+            "description": "Model emitters produce strings; hand-authored files may use raw numbers/booleans (the C# reader accepts the union)."
+          },
+          "units": { "type": "string" },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+        },
+        "required": ["name", "spec_type", "group", "is_instance", "value"],
+        "additionalProperties": false
+      }
+    },
+    "warnings": { "type": "array", "items": { "type": "string" } }
+  },
+  "required": ["schema_version", "family_name", "category", "geometry", "parameters"],
+  "additionalProperties": false,
+  "definitions": {
+    "dimension": {
+      "type": "object",
+      "properties": {
+        "value": { "type": "number", "exclusiveMinimum": 0 },
+        "unit": { "enum": ["in", "mm", "cm", "m", "ft"] }
+      },
+      "required": ["value", "unit"],
+      "additionalProperties": false
+    }
+  }
+}
