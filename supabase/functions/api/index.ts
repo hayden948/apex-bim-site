@@ -43,7 +43,7 @@ const supabase = createClient(
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// ---------- Telegram alerts (optional; enabled by the TELEGRAM_BOT_TOKEN secret) ----------
+// ---------- Telegram alerts (optional; enabled by TELEGRAM_BOT_TOKEN / app_config) ----------
 
 // Telegram settings come from env when set, else from the service-role-only
 // app_config table (kept out of git — this repo is public).
@@ -69,6 +69,9 @@ async function tgChat(): Promise<string | null> {
   return data ? String(data.chat_id) : null;
 }
 
+// ALERT HYGIENE (verdict C, 2026-08-21): alert text must never embed drawing-derived
+// strings — no family names, no filenames, no error payloads, no validation problem text.
+// IDs, counts, scores, and thresholds only. Enforced by tests/test_alert_hygiene.py.
 /** Fire-and-forget push to the operator's Telegram; never blocks or fails the pipeline. */
 async function notify(text: string): Promise<void> {
   try {
@@ -468,7 +471,7 @@ async function processExtraction(extractionId: string, storageKey: string): Prom
       await supabase.from("extractions").update({
         status: "failed", error_message: extraction.message, duration_ms: Date.now() - started,
       }).eq("id", extractionId);
-      await notifyIfAuto(extractionId, `❌ Extraction ${shortId(extractionId)} failed: ${extraction.message}`);
+      await notifyIfAuto(extractionId, `❌ Extraction ${shortId(extractionId)} failed (details in the console).`);
       return;
     }
     // deno-lint-ignore no-explicit-any
@@ -484,7 +487,7 @@ async function processExtraction(extractionId: string, storageKey: string): Prom
         status: "failed", error_message: `Model output failed FamilySpec v${FAMILYSPEC_VERSION} validation: ${msg}`,
         duration_ms: Date.now() - started, cost_usd: extraction.costUsd,
       }).eq("id", extractionId);
-      await notifyIfAuto(extractionId, `❌ Extraction ${shortId(extractionId)} produced an invalid result: ${check.problems[0]}`);
+      await notifyIfAuto(extractionId, `❌ Extraction ${shortId(extractionId)} produced an invalid result (${check.problems.length} problem(s) — see the console).`);
       return;
     }
     result.schema_version = FAMILYSPEC_VERSION;
@@ -505,7 +508,7 @@ async function processExtraction(extractionId: string, storageKey: string): Prom
       error_message: message,
       duration_ms: Date.now() - started,
     }).eq("id", extractionId);
-    await notifyIfAuto(extractionId, `❌ Extraction ${shortId(extractionId)} failed: ${message}`);
+    await notifyIfAuto(extractionId, `❌ Extraction ${shortId(extractionId)} failed (details in the console).`);
   }
 }
 
@@ -773,7 +776,7 @@ async function autoAdvance(extractionId: string): Promise<void> {
       await auditAuto("extraction", extractionId, "auto_review_required",
         { lowest_confidence: lowest, min_required: minConf, parameters: params.length });
       await notify(
-        `⏸ Review needed: "${pred?.family_name ?? "unknown"}" — lowest parameter confidence ` +
+        `⏸ Review needed: extraction ${shortId(extractionId)} — lowest parameter confidence ` +
         `${lowest.toFixed(2)} is below the ${minConf} bar (${params.length} params).\n` +
         `/approve ${shortId(extractionId)} · /reject ${shortId(extractionId)} · /pending`);
       return; // stays 'ready' for a human
@@ -782,7 +785,7 @@ async function autoAdvance(extractionId: string): Promise<void> {
     const approved = await approveCore(extractionId, projectId, pred, DEMO_USER, "api:auto");
     if ("error" in approved) {
       await auditAuto("extraction", extractionId, "auto_approve_failed", { error: approved.error });
-      await notify(`⚠️ Auto-approve failed for extraction ${shortId(extractionId)}: ${approved.error}`);
+      await notify(`⚠️ Auto-approve failed for extraction ${shortId(extractionId)} (see the console).`);
       return;
     }
 
@@ -792,7 +795,7 @@ async function autoAdvance(extractionId: string): Promise<void> {
     if (!qa.passed) {
       await auditAuto("family", approved.fam.id, "auto_qa_blocked", { score: qa.score });
       await notify(
-        `⚠️ "${approved.fam.family_name}" was auto-approved but QA blocked the build ` +
+        `⚠️ Family ${shortId(approved.fam.id)} was auto-approved but QA blocked the build ` +
         `(score ${qa.score}). Fix it in the console.`);
       return; // family exists; QA errors need a human
     }
@@ -802,13 +805,13 @@ async function autoAdvance(extractionId: string): Promise<void> {
       .select("id").single();
     if (jobErr) {
       await auditAuto("family", approved.fam.id, "auto_queue_failed", { error: jobErr.message });
-      await notify(`⚠️ Could not queue the RFA build for "${approved.fam.family_name}": ${jobErr.message}`);
+      await notify(`⚠️ Could not queue the RFA build for family ${shortId(approved.fam.id)} (see the console).`);
       return;
     }
     await auditAuto("job", job.id, "rfa_generation_queued",
       { family_id: approved.fam.id, qa_score: qa.score });
     await notify(
-      `✅ "${approved.fam.family_name}" auto-approved (all params ≥ ${minConf}) — ` +
+      `✅ Extraction ${shortId(extractionId)} auto-approved (all params ≥ ${minConf}) — ` +
       `QA ${qa.score} — RFA job ${shortId(job.id)} queued.`);
   } catch (e) {
     console.error("autoAdvance failed", e);
@@ -1487,8 +1490,8 @@ Deno.serve(async (req: Request) => {
           : { data: null };
         if (proj?.auto_pipeline) {
           await notify(status === "succeeded"
-            ? `📦 RFA built: "${fam?.family_name}" is in the library.`
-            : `❌ RFA build failed for "${fam?.family_name}": ${String(body?.error ?? "unknown")}`);
+            ? `📦 RFA built: family ${shortId(data.entity_id)} is in the library.`
+            : `❌ RFA build failed for family ${shortId(data.entity_id)} (see the console).`);
         }
       }
       return json({ id: data.id, status: data.status });

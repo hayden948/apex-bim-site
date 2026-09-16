@@ -60,9 +60,11 @@ jobs:
         if: steps.creds.outputs.have == 'true'
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        # Both functions do their own auth (apx_ tokens / user JWTs / Telegram's
-        # secret header), so the platform JWT gate must stay off — a deploy
-        # without --no-verify-jwt would silently break the Telegram webhook.
+        # All three functions do their own auth (apx_ tokens / user JWTs /
+        # Telegram's secret header; apex-purge refuses the publishable key
+        # outright), so the platform JWT gate must stay off — a deploy without
+        # --no-verify-jwt would silently break them.
         run: |
           supabase functions deploy api --project-ref "$PROJECT_REF" --no-verify-jwt
           supabase functions deploy telegram-webhook --project-ref "$PROJECT_REF" --no-verify-jwt
+          supabase functions deploy apex-purge --project-ref "$PROJECT_REF" --no-verify-jwt

@@ -40,8 +40,14 @@
   refuses to package a build folder missing any runtime dependency. Operator: download
   artifact 9416585424, attach it to a GitHub Release on the tag so it outlives the 90-day
   artifact retention — that copy goes to CVE.
-- Cloud half: Supabase edge function `api` **v29** (deployed), `telegram-webhook` v8; both
-  redeployable from this repo (`supabase/functions/`), CI keeps `--no-verify-jwt`.
+- Cloud half: Supabase edge functions `api` **v30**, `telegram-webhook` **v10** (both carry
+  the 2026-08-21 alert-hygiene pass — no drawing-derived strings in Telegram traffic), and
+  `apex-purge` **v1** (the data-deletion endpoint; its contract lives in the sibling
+  revit-mcp-server repo's DATA_FLOW.md). All three sources reconciled into this repo
+  2026-09-16 after a period of server↔repo drift; all redeployable from
+  `supabase/functions/`, CI keeps `--no-verify-jwt` for all three. NOTE: auto-deploy on
+  merge stays a no-op until the `SUPABASE_ACCESS_TOKEN` repo secret is set (the workflow
+  soft-skips and says so in its log).
 
 ## How CVE reverts to "nothing broken" (customer-side rollback)
 

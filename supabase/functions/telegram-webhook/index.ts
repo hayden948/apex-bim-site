@@ -4,6 +4,11 @@
 // ({method: "sendMessage", ...}) so no bot token is needed here; proactive
 // alerts (the other direction) live in the api function behind
 // TELEGRAM_BOT_TOKEN.
+//
+// ALERT HYGIENE (verdict C, 2026-08-21): replies must never embed drawing-derived
+// strings — no family names, no file names, no error payloads, no validation problem
+// text. IDs, categories (fixed Revit vocabulary), counts, scores, and thresholds
+// only. Enforced by tests/test_alert_hygiene.py.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
@@ -72,11 +77,11 @@ async function handleCommand(text: string): Promise<string> {
     if (!rows.length) return "Nothing is waiting for review. ✨";
     return "Waiting for review:\n" + rows.slice(0, 8).map((r) => {
       const pred = r.claude_result ?? {};
-      return `• ${r.id.slice(0, 8)} — ${pred.family_name ?? "?"} (${pred.category ?? "?"}), ` +
+      return `• ${r.id.slice(0, 8)} — ${pred.category ?? "?"}, ` +
         `min conf ${lowestConf(pred).toFixed(2)}`;
     }).join("\n") +
       (rows.length > 8 ? `\n…and ${rows.length - 8} more.` : "") +
-      "\n\n/approve <id> · /reject <id>";
+      "\n\n/approve <id> · /reject <id> · details in the console";
   }
 
   if (verb === "/approve" || verb === "/reject") {
@@ -86,25 +91,24 @@ async function handleCommand(text: string): Promise<string> {
     if (hits.length === 0) return `No pending extraction matches "${arg}" — try /pending.`;
     if (hits.length > 1) return `"${arg}" matches ${hits.length} extractions — use more characters.`;
     const ex = hits[0];
-    const name = ex.claude_result?.family_name ?? ex.id.slice(0, 8);
+    const shortId = ex.id.slice(0, 8);
 
     if (verb === "/reject") {
       const r = await api(`/extractions/${ex.id}/reject`, "POST", {});
       return r.status < 300
-        ? `🗑 Rejected "${name}". The upload can be re-processed any time.`
-        : `Reject failed (${r.status}): ${r.body?.error?.message ?? "unknown error"}`;
+        ? `🗑 Rejected extraction ${shortId}. The upload can be re-processed any time.`
+        : `Reject failed (${r.status}) — see the console.`;
     }
 
     const r = await api(`/extractions/${ex.id}/approve?chain=1`, "POST", {});
     if (r.status >= 300) {
-      return `Approve failed (${r.status}): ${r.body?.error?.message ?? "unknown error"}`;
+      return `Approve failed (${r.status}) — see the console.`;
     }
-    const finalName = r.body?.family?.family_name ?? name;
     const qa = r.body?.qa;
     if (r.body?.job_id) {
-      return `✅ Approved "${finalName}" — QA ${qa?.score} — RFA job ${r.body.job_id.slice(0, 8)} queued.`;
+      return `✅ Approved extraction ${shortId} — QA ${qa?.score} — RFA job ${r.body.job_id.slice(0, 8)} queued.`;
     }
-    return `✅ Approved "${finalName}" — but QA blocked the build (score ${qa?.score}). Fix it in the console.`;
+    return `✅ Approved extraction ${shortId} — but QA blocked the build (score ${qa?.score}). Fix it in the console.`;
   }
 
   if (verb === "/status") {
@@ -170,7 +174,7 @@ Deno.serve(async (req: Request) => {
       reply = await handleCommand(text);
     } catch (e) {
       console.error("command failed", e);
-      reply = `Command failed: ${e instanceof Error ? e.message : String(e)}`;
+      reply = "Command failed — see the function logs.";
     }
     return new Response(
       JSON.stringify({ method: "sendMessage", chat_id: msg.chat.id, text: reply }),
